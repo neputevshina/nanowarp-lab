@@ -1,0 +1,123 @@
+package main
+
+import (
+	"math"
+	"math/cmplx"
+	"os"
+	"reflect"
+
+	"github.com/neputevshina/nanowarp/wav"
+	"golang.org/x/exp/constraints"
+)
+
+var mag = cmplx.Abs
+
+func bitsafe(v float64) float64 {
+	if v != v || math.IsInf(v, 0) {
+		return 0
+	}
+	return v
+}
+
+func add[T constraints.Float](dst, src []T) {
+	for i := 0; i < min(len(dst), len(src)); i++ {
+		dst[i] += src[i]
+	}
+}
+
+func mul[T constraints.Float](dst, src []T) {
+	for i := 0; i < min(len(dst), len(src)); i++ {
+		dst[i] *= src[i]
+	}
+}
+
+func mix[F constraints.Float](a, b, x F) F {
+	return a*(1-x) + b*x
+}
+
+func makeslices(a any, nbins, nfft int) {
+	rn := reflect.ValueOf(a).Elem()
+	for i := 0; i < rn.NumField(); i++ {
+		f := rn.Field(i)
+		if f.Kind() == reflect.Slice {
+			c := f.Interface()
+			switch c := c.(type) {
+			case []complex128:
+				f.Set(reflect.ValueOf(make([]complex128, nbins)))
+			case []float64:
+				f.Set(reflect.ValueOf(make([]float64, nfft)))
+			case [][]complex128:
+				for i := range c {
+					c[i] = make([]complex128, nbins)
+				}
+			}
+		}
+	}
+}
+
+func niemitalo(out []float64) {
+	// https://dsp.stackexchange.com/questions/2337/fft-with-asymmetric-windowing
+	nfft := float64(len(out))
+	clear(out)
+	sin, cos := math.Sin, math.Cos
+	for i := nfft / 4; i < nfft*7/8; i++ {
+		x := 2 * math.Pi * ((i+0.5)/nfft - 1.75)
+		out[int(i)] = 2.57392230162633461887 - 1.58661480271141974718*cos(x) + 3.80257516644523141380*sin(x) -
+			1.93437090055110760822*cos(2*x) - 3.27163999159752183488*sin(2*x) + 3.26617449847621266201*cos(3*x) -
+			0.30335261753524439543*sin(3*x) - 0.92126091064427817479*cos(4*x) + 2.33100177294084742741*sin(4*x) -
+			1.19953922321306438725*cos(5*x) - 1.25098147932225423062*sin(5*x) + 0.99132076607048635886*cos(6*x) -
+			0.34506787787355830410*sin(6*x) - 0.04028033685700077582*cos(7*x) + 0.55461815542612269425*sin(7*x) -
+			0.21882110175036428856*cos(8*x) - 0.10756484378756643594*sin(8*x) + 0.06025986430527170007*cos(9*x) -
+			0.05777077835678736534*sin(9*x) + 0.00920984524892982936*cos(10*x) + 0.01501989089735343216*sin(10*x)
+	}
+	for i := 0; i < int(nfft)/8; i++ {
+		nfft := int(nfft)
+		out[nfft-1-i] = (1 - out[nfft*3/4-1-i]*out[nfft*3/4+i]) / out[nfft/2+i]
+	}
+	copy(out, out[int(nfft)*2/8:])
+	clear(out[int(nfft)*6/8:])
+}
+
+func windowGain(w []float64) (a float64) {
+	for _, e := range w {
+		a += e * e
+	}
+	a /= float64(len(w))
+	return
+}
+
+func fill[T any](s []T, e T) {
+	for i := range s {
+		s[i] = e
+	}
+}
+
+func abs[T constraints.Signed | constraints.Float](a T) T {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
+func dump(name string, data []float64, fs int) {
+	file, err := os.Create(name)
+	defer file.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	wr := wav.NewWriter(file, uint32(len(data)), 1, uint32(fs), 32, true)
+	nbuf := 2048
+	buf := make([]wav.Sample, 0, nbuf)
+	for i := 0; i < len(data); i += nbuf {
+		buf = buf[:0]
+		for j := i; j < min(i+nbuf, len(data)); j++ {
+			buf = append(buf, wav.Sample{Values: [2]int{
+				int(math.Float32bits(float32(data[j])))}})
+		}
+		err := wr.WriteSamples(buf)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
