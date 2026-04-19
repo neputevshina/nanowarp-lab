@@ -56,11 +56,11 @@ func main() {
 		div[i] = bitsafe(rights[i] / vert[i])
 	}
 
-	dump("ups", ups, fs)
-	dump("downs", downs, fs)
-	dump("rights", rights, fs)
-	dump("vert", vert, fs)
-	dump("div", div, fs)
-	dump("sub", sub, fs)
+	dump("ups.wav", ups, fs)
+	dump("downs.wav", downs, fs)
+	dump("rights.wav", rights, fs)
+	dump("vert.wav", vert, fs)
+	dump("div.wav", div, fs)
+	dump("sub.wav", sub, fs)
 
 }

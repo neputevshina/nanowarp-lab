@@ -67,7 +67,7 @@ func (n *detector) process2(lin, a, b, c []float64) {
 
 	t := make([]float64, n.nfft)
 	for i := 0; i < len(lin); i += n.hop {
-		ax, bx, cx := n.advance(lin[i:min(len(lin)-n.hop, i+n.nbuf-n.hop)], lin[i:min(len(lin), i+n.nbuf)])
+		ax, bx, cx := n.advance(lin[min(len(lin)-n.hop, i):min(len(lin)-n.hop, i+n.nbuf-n.hop)], lin[i:min(len(lin), i+n.nbuf)])
 
 		fill(t, ax)
 		mul(t, n.a.Wr)
@@ -113,18 +113,18 @@ func (n *detector) advance(pingrain, ingrain []float64) (up, down, right float64
 		switch h.t {
 		case -1:
 			if n.arm[w] {
-				right++
+				right += mag(a.Y[w])
 				n.arm[w] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w]), w, 0})
 			}
 		case 0:
 			if w > 1 && n.arm[w-1] {
-				down++
+				up += mag(a.X[w-1])
 				n.arm[w-1] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w-1]), w - 1, 0})
 			}
 			if w < n.nbins-1 && n.arm[w+1] {
-				up++
+				down += mag(a.X[w+1])
 				n.arm[w+1] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w+1]), w + 1, 0})
 			}

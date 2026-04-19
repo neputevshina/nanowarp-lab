@@ -92,13 +92,6 @@ func fill[T any](s []T, e T) {
 	}
 }
 
-func abs[T constraints.Signed | constraints.Float](a T) T {
-	if a < 0 {
-		return -a
-	}
-	return a
-}
-
 func dump(name string, data []float64, fs int) {
 	file, err := os.Create(name)
 	defer file.Close()
