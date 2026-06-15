@@ -6,8 +6,8 @@ import (
 	"strconv"
 )
 
-var finputa = flag.String("a", "", "source a WAV (or anything else, if ffmpeg is present) `path`")
-var finputb = flag.String("b", "", "source b WAV (or anything else, if ffmpeg is present) `path`")
+var finputa = flag.String("a", "", "source a WAV")
+var finputb = flag.String("b", "", "source b WAV")
 var pm = flag.String("p", "", "phase mix")
 var mm = flag.String("m", "", "magnitude mix")
 
