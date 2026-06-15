@@ -76,7 +76,11 @@ func (w *WavSignalReader) MakeWriter(prr error, of io.Writer) (wsw *WavSignalWri
 	if prr != nil {
 		return nil, prr
 	}
-	return NewWavSignalWriter(err, of, int(w.Size)/int(w.NumChannels)/int(w.BitsPerSample/8), int(w.NumChannels), int(w.SampleRate))
+	return NewWavSignalWriter(err,
+		of,
+		delay(int(w.Size)/int(w.NumChannels)/int(w.BitsPerSample/8)),
+		delay(int(w.NumChannels)),
+		delay(int(w.SampleRate)))
 }
 
 type WavSignalWriter struct {

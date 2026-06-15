@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/neputevshina/nanowarp/dspio"
-	"gonum.org/v1/gonum/cmplxs"
 	"gonum.org/v1/gonum/dsp/fourier"
 	"gonum.org/v1/gonum/floats"
 )
@@ -228,7 +227,7 @@ func (n *warper) crossAnalyze(phasemix, magnitudemix float64, presenta [][]float
 
 	clear(Mid)
 	for ch := range presenta {
-		floats.Add(Mid, presenta[ch])
+		floats.Add(Mid[:len(presenta[ch])], presenta[ch])
 		n.enfft(C[ch], a.W, presenta[ch])
 	}
 
@@ -255,7 +254,7 @@ func (n *warper) crossAnalyze(phasemix, magnitudemix float64, presenta [][]float
 	// Repeating with presentb:
 	clear(Mid)
 	for ch := range presentb {
-		floats.Add(Mid, presentb[ch])
+		floats.Add(Mid[:len(presenta[ch])], presentb[ch])
 		n.enfft(C[ch], a.W, presentb[ch])
 	}
 
@@ -338,11 +337,10 @@ func (n *warper) synthesize(output [][]float64, C [][]complex128, Ph []float64) 
 	a := &n.a
 	for w := range Ph {
 		// Add stereo phase differences back through complex multiplication.
-		a.Y[w] = cmplx.Rect(1, Ph[w])
+		a.Y[w] = cmplx.Rect(n.a.M[w], Ph[w])
 	}
 	for ch := range output {
-		cmplxs.MulTo(a.X, C[ch], a.Y)
-		n.defft(output[ch], a.X, true)
+		n.defft(output[ch], a.Y, true)
 	}
 }
 

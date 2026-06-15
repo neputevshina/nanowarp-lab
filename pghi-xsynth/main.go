@@ -2,11 +2,8 @@ package main
 
 import (
 	"flag"
-	"io"
 	"os"
-	"sync"
-
-	"github.com/neputevshina/nanowarp/dspio"
+	"strconv"
 )
 
 var finputa = flag.String("a", "", "source a WAV (or anything else, if ffmpeg is present) `path`")
@@ -37,59 +34,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	dt := warperNew(4096, 2, 4, 2)
-	dt.process(wsa, wsb, wsw, new(1.), new(0.))
-	po, pi := dspio.GoPipe(2)
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		defer pi.Close()
-		_ = dt.NoveltyCurveProcess(wsr, pi)
-	}()
-	wg.Wait()
-
-	mid := []float64{}
-	side := []float64{}
-	for {
-		_, samples, err := wavrd.ReadSamples(nil)
-		if err == io.EOF {
-			break
-		}
-
-		for _, sample := range samples {
-			l, r := wavrd.FloatValue(sample, 0), wavrd.FloatValue(sample, 1)
-			mid = append(mid, l)
-			side = append(side, r)
-		}
-	}
-
-	ups := make([]float64, int(float64(len(mid))))
-	downs := make([]float64, int(float64(len(mid))))
-	rights := make([]float64, int(float64(len(mid))))
-
-	f, err := wavrd.Format()
+	dt := warperNew(512, 2, 4, 2)
+	pm, err := strconv.ParseFloat(*pm, 64)
 	if err != nil {
 		panic(err)
 	}
-	fs := int(f.SampleRate)
-	// d := warperNew(4096, 2, 4, 2)
-	// d.process1000(mid, ups, downs, rights)
-
-	vert := make([]float64, int(float64(len(mid))))
-	sub := make([]float64, int(float64(len(mid))))
-	div := make([]float64, int(float64(len(mid))))
-	for i := range ups {
-		vert[i] = bitsafe(ups[i] + downs[i])
-		sub[i] = bitsafe(ups[i] - downs[i])
-		div[i] = bitsafe(rights[i] / vert[i])
+	mm, err := strconv.ParseFloat(*mm, 64)
+	if err != nil {
+		panic(err)
 	}
-
-	dump("ups.wav", ups, fs)
-	dump("downs.wav", downs, fs)
-	dump("rights.wav", rights, fs)
-	dump("vert.wav", vert, fs)
-	dump("div.wav", div, fs)
-	dump("sub.wav", sub, fs)
+	err = dt.process(wsa, wsb, wsw, &pm, &mm)
 
 }
