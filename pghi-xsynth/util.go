@@ -417,3 +417,5 @@ func make3(k, j, i int) [][][]float64 {
 	}
 	return g
 }
+
+func delay[T any](v T) func() T { return func() T { return v } }

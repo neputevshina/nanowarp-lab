@@ -85,12 +85,12 @@ type WavSignalWriter struct {
 
 var _ dspio.SignalWriter = &WavSignalWriter{}
 
-func NewWavSignalWriter(prr error, file io.Writer, length int, nch int, fs int) (wsw *WavSignalWriter, err error) {
+func NewWavSignalWriter(prr error, file io.Writer, length func() int, nch func() int, fs func() int) (wsw *WavSignalWriter, err error) {
 	if prr != nil {
 		return nil, prr
 	}
 	wsw = &WavSignalWriter{}
-	wsw.Writer = wav.NewWriter(file, uint32(length), uint16(nch), uint32(fs), 32, true)
+	wsw.Writer = wav.NewWriter(file, uint32(length()), uint16(nch()), uint32(fs()), 32, true)
 	return
 }
 

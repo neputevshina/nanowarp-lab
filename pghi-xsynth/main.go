@@ -4,8 +4,9 @@ import (
 	"flag"
 	"io"
 	"os"
+	"sync"
 
-	"github.com/neputevshina/nanowarp/wav"
+	"github.com/neputevshina/nanowarp/dspio"
 )
 
 var finputa = flag.String("a", "", "source a WAV (or anything else, if ffmpeg is present) `path`")
@@ -16,12 +17,37 @@ var mm = flag.String("m", "", "magnitude mix")
 func main() {
 	flag.Parse()
 
-	file, err := os.Open(*finputa)
+	fa, err := os.Open(*finputa)
+	if err != nil {
+		panic(err)
+	}
+	fb, err := os.Open(*finputb)
 	if err != nil {
 		panic(err)
 	}
 
-	wavrd := wav.NewReader(file)
+	// Center-dilated novelty curve
+	of, err := os.Create(`xsynth.wav`)
+	defer of.Close()
+
+	wsa, err := NewWavSignalReader(err, fa)
+	wsb, err := NewWavSignalReader(err, fb)
+	wsw, err := NewWavSignalWriter(err, of, func() int { return int(min(wsa.Size, wsb.Size)) },
+		delay(2), func() int { return int(max(wsa.SampleRate, wsb.SampleRate)) })
+	if err != nil {
+		panic(err)
+	}
+	dt := warperNew(4096, 2, 4, 2)
+	dt.process(wsa, wsb, wsw, new(1.), new(0.))
+	po, pi := dspio.GoPipe(2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		defer pi.Close()
+		_ = dt.NoveltyCurveProcess(wsr, pi)
+	}()
+	wg.Wait()
 
 	mid := []float64{}
 	side := []float64{}
