@@ -62,30 +62,32 @@ func detectorNew(nfft, fs int) (n *detector) {
 	return
 }
 
-func (n *detector) process2(lin, a, b, c []float64) {
+func (n *detector) process2(lin, a, b, c, d, e []float64) {
 	fmt.Fprintln(os.Stderr, `(*detector).process`)
 
 	t := make([]float64, n.nfft)
 	for i := 0; i < len(lin); i += n.hop {
-		ax, bx, cx := n.advance(lin[min(len(lin)-n.hop, i):min(len(lin)-n.hop, i+n.nbuf-n.hop)], lin[i:min(len(lin), i+n.nbuf)])
+		pgrain := lin[min(len(lin)-n.hop, i):min(len(lin)-n.hop, i+n.nbuf-n.hop)]
+		grain := lin[i:min(len(lin), i+n.nbuf)]
+		so, div, ur, dr, sk := n.advance(pgrain, grain)
 
-		fill(t, ax)
-		mul(t, n.a.Wr)
-		add(a[i:min(len(lin), i+n.nbuf)], t)
+		add := func(v float64, o []float64) {
+			fill(t, v)
+			mul(t, n.a.Wr)
+			add(o[i:min(len(lin), i+n.nbuf)], t)
+		}
 
-		fill(t, bx)
-		mul(t, n.a.Wr)
-		add(b[i:min(len(lin), i+n.nbuf)], t)
-
-		fill(t, cx)
-		mul(t, n.a.Wr)
-		add(c[i:min(len(lin), i+n.nbuf)], t)
+		add(so, a)
+		add(div, b)
+		add(ur, c)
+		add(dr, d)
+		add(sk, e)
 	}
 
 	return
 }
 
-func (n *detector) advance(pingrain, ingrain []float64) (up, down, right float64) {
+func (n *detector) advance(pingrain, ingrain []float64) (nsource, ndiverge, nupright, ndownright, nsink float64) {
 	a := &n.a
 	enfft := func(x []complex128, w, grain []float64) {
 		clear(a.S)
@@ -106,6 +108,13 @@ func (n *detector) advance(pingrain, ingrain []float64) (up, down, right float64
 	}
 	heapInit(&n.heap)
 
+	field := make([]uint, n.nbins)
+	const (
+		right = 1 << iota
+		up
+		down
+	)
+
 	// This is just PGHI without phase accumulation.
 	for len(n.heap) > 0 {
 		h := heapPop(&n.heap).(heaptriple)
@@ -113,23 +122,37 @@ func (n *detector) advance(pingrain, ingrain []float64) (up, down, right float64
 		switch h.t {
 		case -1:
 			if n.arm[w] {
-				right += mag(a.Y[w])
+				field[w] |= right
 				n.arm[w] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w]), w, 0})
 			}
 		case 0:
 			if w > 1 && n.arm[w-1] {
-				up += mag(a.X[w-1])
+				field[w] |= down
 				n.arm[w-1] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w-1]), w - 1, 0})
 			}
 			if w < n.nbins-1 && n.arm[w+1] {
-				down += mag(a.X[w+1])
+				field[w] |= up
 				n.arm[w+1] = false
 				heapPush(&n.heap, heaptriple{mag(a.X[w+1]), w + 1, 0})
 			}
 		}
 	}
-
+	for i, v := range field {
+		unit := min(1, 1/float64(i))
+		switch v {
+		case 0:
+			nsink += unit
+		case up | right:
+			nupright += unit
+		case down | right:
+			ndownright += unit
+		case up | down:
+			ndiverge += unit
+		case up | down | right:
+			nsource += unit
+		}
+	}
 	return
 }

@@ -35,9 +35,11 @@ func main() {
 		}
 	}
 
-	ups := make([]float64, int(float64(len(mid))))
-	downs := make([]float64, int(float64(len(mid))))
-	rights := make([]float64, int(float64(len(mid))))
+	sources := make([]float64, int(float64(len(mid))))
+	diverges := make([]float64, int(float64(len(mid))))
+	urs := make([]float64, int(float64(len(mid))))
+	drs := make([]float64, int(float64(len(mid))))
+	sinks := make([]float64, int(float64(len(mid))))
 
 	f, err := wavrd.Format()
 	if err != nil {
@@ -45,22 +47,14 @@ func main() {
 	}
 	fs := int(f.SampleRate)
 	d := detectorNew(2048, fs)
-	d.process2(mid, ups, downs, rights)
+	d.process2(mid, sources, diverges, urs, drs, sinks)
 
-	vert := make([]float64, int(float64(len(mid))))
-	sub := make([]float64, int(float64(len(mid))))
-	div := make([]float64, int(float64(len(mid))))
-	for i := range ups {
-		vert[i] = bitsafe(ups[i] + downs[i])
-		sub[i] = bitsafe(ups[i] - downs[i])
-		div[i] = bitsafe(rights[i] / vert[i])
+	for i := range sinks {
+		sinks[i] = urs[i] + drs[i]
 	}
 
-	dump("ups.wav", ups, fs)
-	dump("downs.wav", downs, fs)
-	dump("rights.wav", rights, fs)
-	dump("vert.wav", vert, fs)
-	dump("div.wav", div, fs)
-	dump("sub.wav", sub, fs)
-
+	dump("sources.wav", sources, fs)
+	dump("twos.wav", sinks, fs)
+	dump("urs.wav", urs, fs)
+	dump("drs.wav", drs, fs)
 }
