@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/neputevshina/nanowarp/dspio"
+	"github.com/neputevshina/nanowarp/oscope"
 	"gonum.org/v1/gonum/dsp/fourier"
 	"gonum.org/v1/gonum/floats"
 )
@@ -29,10 +30,10 @@ type warper struct {
 }
 
 type wbufs struct {
-	S, Mid, M, P, F            []float64 // Scratch buffers
-	Ph                         []float64 `size:"nbins"` // Current phase
-	Past, Future               []float64 // Phase accumulators
-	Fadv, Tadv                 []float64
+	Mid, S                     []float64      // Scratch buffers
+	Ph, M, P, F                []float64      `size:"nbins"` // Current phase
+	Past, Future               []float64      // Phase accumulators
+	Fadv, Tadv                 []float64      `size:"nbins"`
 	W, Wr, Wd, Wt, Wdt         []float64      // Window functions
 	X, Y, Xd, Xt, L, R, Lo, Ro []complex128   // Complex spectra
 	C, Co                      [][]complex128 // Channels
@@ -41,26 +42,17 @@ type wbufs struct {
 	Phs, Fadvs, Tadvs, Ms [][]float64 `size:"lah"`
 }
 
-func (w *warper) process(ain, bin dspio.SignalReader, out dspio.SignalWriter, pm, mm *float64) error {
+func (w *warper) process(ain dspio.SignalReader) error {
 	agr := dspio.NewGrainReader(w.nbuf, w.hop, ain)
-	bgr := dspio.NewGrainReader(w.nbuf, w.hop, bin)
-	gw := dspio.NewGrainWriter(w.nbuf, w.hop, out)
 
 	agrain := make2(ain.NchRead(), w.nbuf)
-	bgrain := make2(ain.NchRead(), w.nbuf)
-	outgrain := make2(ain.NchRead(), w.nbuf)
 	var err error
 	for {
 		_, err = agr.SignalRead(nil, agrain)
-		_, err = bgr.SignalRead(err, bgrain)
 		if err != nil {
 			break
 		}
-		w.advance(agrain, bgrain, outgrain, *pm, *mm)
-		_, err = gw.SignalWrite(nil, outgrain)
-		if err != nil {
-			break
-		}
+		w.advance(agrain)
 	}
 	if err == io.EOF {
 		err = nil
@@ -78,7 +70,6 @@ func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
 		hop:   nbuf / olap,
 		olap:  olap,
 		osamp: float64(osamp),
-		lah:   olap*120 + 1,
 	}
 	a := &n.a
 
@@ -104,10 +95,6 @@ func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
 	slices.Reverse(s(a.Wr))
 	n.wgain = windowGain(n.a.W)
 	n.norm = float64(nfft) * float64(n.olap) * n.osamp * n.wgain
-
-	// waveform.Dump(nil, a.W)
-	// waveform.Dump(nil, a.Wt)
-	// waveform.Dump(nil, a.Wd)
 
 	n.fft = fourier.NewFFT(nfft)
 	n.heap = make(hp, n.lah*n.nbins) // 2 for future and past.
@@ -148,22 +135,6 @@ func (n *warper) resetPast(present [][]float64) {
 	}
 }
 
-func (n *warper) bypassGrain(present, output [][]float64) {
-	a := &n.a
-	for ch := range present {
-		// This is the only known way to correctly scale gains.
-		n.enfft(a.Co[ch], a.W, present[ch])
-		n.defft(output[ch], a.Co[ch], true)
-		// And this works with -40 dB difference.
-		// copy(output[ch], present[ch])
-		// mul(output[ch], a.W)
-		// mul(output[ch], a.Wr)
-		// scale(output[ch], n.wgain*float64(n.nbuf)/float64(n.hop))
-		// Probably there is something wrong in gonum FFT implementation.
-		// It is not related to COLA property.
-	}
-}
-
 func (n *warper) bash(present [][]float64, C [][]complex128, M, Ph []float64, Mid []float64) {
 	a := &n.a
 	clear(Mid)
@@ -177,7 +148,7 @@ func (n *warper) bash(present [][]float64, C [][]complex128, M, Ph []float64, Mi
 	}
 }
 
-func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64, speedup float64) {
+func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64) {
 	a := &n.a
 
 	clear(Mid)
@@ -191,23 +162,12 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, M
 	n.enfft(a.Xt, a.Wt, Mid)
 	n.enfft(a.Y, a.Wdt, Mid)
 
-	// See Flandrin, P. et al. (2002). Time-frequency reassignment: from principles to algorithms.
 	for w := range a.X {
-		// TODO Probably it will be more numerically stable to limit the phase accuum to
-		// 0..1 and scale back to -π..π range at the poltocar conversion.
-		// fadv must return 0..1 accordingly, simply defer π multiplication till the end.
-		Fadv[w] = princarg(getfadv(a.X, a.Xt, 2./n.osamp/speedup)(w))
-		Tadv[w] = gettadv(a.X, a.Xd, float64(n.olap)*n.osamp)(w)
+		Fadv[w] = princarg(getfadv(a.X, a.Xt, 2./n.osamp)(w))
+		Tadv[w] = tdx(a.X, a.Xd, w, float64(n.olap)*n.osamp)
 	}
 
 	for w := range a.X {
-		// Encode stereo phase differences and stretch mid only, keep original magnitudes.
-		// NB: Phase difference in polar coordinates is complex division in cartesian.
-		//     Phase sum is conversely a multiply.
-		//     Hypot and multiplication are always cheaper than Atan2 and Sincos.
-		//
-		// See “Altoè, A. (2012). A transient-preserving audio time-stretching algorithm and a
-		// real-time realization for a commercial music product.”
 		m := mag(a.X[w])
 		p := a.X[w] / complex(m, 0)
 		if m < 1e-6 {
@@ -217,68 +177,6 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, M
 		a.Y[w] = p
 	}
 	for ch := range present {
-		for w := range a.X {
-			C[ch][w] /= a.Y[w]
-		}
-	}
-}
-
-func (n *warper) crossAnalyze(phasemix, magnitudemix float64, presenta [][]float64, presentb [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64) {
-	a := &n.a
-
-	clear(Mid)
-	for ch := range presenta {
-		floats.Add(Mid[:len(presenta[ch])], presenta[ch])
-		n.enfft(C[ch], a.W, presenta[ch])
-	}
-
-	n.enfft(a.X, a.W, Mid)
-	n.enfft(a.Xd, a.Wd, Mid)
-	n.enfft(a.Xt, a.Wt, Mid)
-
-	// Stretch coefficient in cross-synthesis is 1, we're not changing the duration of sound.
-	for w := range a.X {
-		Fadv[w] = getfadv(a.X, a.Xt, 2./n.osamp)(w)
-		Tadv[w] = gettadv(a.X, a.Xd, float64(n.olap)*n.osamp)(w)
-	}
-
-	for w := range a.X {
-		m := mag(a.X[w])
-		p := a.X[w] / complex(m, 0)
-		if m < 1e-6 {
-			p = complex(1, 0)
-		}
-		M[w] = m
-		a.Y[w] = p
-	}
-
-	// Repeating with presentb:
-	clear(Mid)
-	for ch := range presentb {
-		floats.Add(Mid[:len(presenta[ch])], presentb[ch])
-		n.enfft(C[ch], a.W, presentb[ch])
-	}
-
-	n.enfft(a.X, a.W, Mid)
-	n.enfft(a.Xd, a.Wd, Mid)
-	n.enfft(a.Xt, a.Wt, Mid)
-
-	// Mix the phase.
-	for w := range a.X {
-		Fadv[w] = princarg(mix(Fadv[w], getfadv(a.X, a.Xt, 2./n.osamp)(w), phasemix))
-		Tadv[w] = mix(Tadv[w], gettadv(a.X, a.Xd, float64(n.olap)*n.osamp)(w), phasemix)
-	}
-
-	for w := range a.X {
-		m := mag(a.X[w])
-		p := a.X[w] / complex(m, 0)
-		if m < 1e-6 {
-			p = complex(1, 0)
-		}
-		M[w] = mix(M[w], m, magnitudemix)
-		a.Y[w] = p
-	}
-	for ch := range presenta {
 		for w := range a.X {
 			C[ch][w] /= a.Y[w]
 		}
@@ -334,30 +232,21 @@ func (n *warper) integrate(Fadv, Tadv, M [][]float64, Ph [][]float64, arm [][]bo
 	}
 }
 
-func (n *warper) synthesize(output [][]float64, C [][]complex128, Ph []float64) {
-	a := &n.a
-	for w := range Ph {
-		// Add stereo phase differences back through complex multiplication.
-		a.Y[w] = cmplx.Rect(n.a.M[w], Ph[w])
-	}
-	for ch := range output {
-		n.defft(output[ch], a.Y, true)
-	}
-}
-
-func (n *warper) advance(presenta, presentb, output [][]float64, pm, mm float64) {
+func (n *warper) advance(presenta [][]float64) {
 	a := &n.a
 
-	n.crossAnalyze(pm, mm, presenta, presentb, a.C, a.Fadv, a.Tadv, a.M, a.Mid)
+	n.analyze(presenta, a.C, a.Fadv, a.Tadv, a.M, a.Mid)
 
-	n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
+	oscope.Oscope(slices.Clone(a.Fadv), oscope.Name(`y`))
+	oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`x`))
 
-	for w := range a.Ph {
-		a.Past[w] = princarg(a.Ph[w])
-	}
-	copy(a.P, a.M)
+	// n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
 
-	n.synthesize(output, a.C, a.Ph)
+	// for w := range a.Ph {
+	// 	a.Past[w] = princarg(a.Ph[w])
+	// }
+	// copy(a.P, a.M)
+
 }
 
 func getfadv(x, xt []complex128, stretch float64) func(w int) float64 {
@@ -369,6 +258,17 @@ func getfadv(x, xt []complex128, stretch float64) func(w int) float64 {
 		// FIXME Works ONLY with nbuf=4096, nfft=8192 (oversampling 2).
 		return -real(xt[j]/x[j])/float64(len(x))*math.Pi*stretch - math.Pi/2
 	}
+}
+
+func tdx(x, xd []complex128, j int, olap float64) float64 {
+	if mag(x[j]) < 1e-6 {
+		return 0
+	}
+	e := imag(xd[j]/x[j]) / (olap / 2)
+	if abs(e) > olap/2 {
+		e = math.Copysign(olap/2, e)
+	}
+	return e
 }
 
 func gettadv(x, xd []complex128, olap float64) func(w int) float64 {
