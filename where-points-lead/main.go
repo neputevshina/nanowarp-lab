@@ -21,7 +21,7 @@ func main() {
 
 	wsa, err := wavio.NewDecoder(fa)
 
-	dt := warperNew(4096, 1, 4, 2)
+	dt := warperNew(4096, 1, 16, 2)
 	err = dt.process(wsa)
 	if err != nil {
 		panic(err)

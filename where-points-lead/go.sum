@@ -1,3 +1,5 @@
+github.com/neputevshina/geom v0.0.0-20241106004821-c16f11df4ba9 h1:knvss/bn/fPP9NPYKgTKaxtPsdFzratM7HMZU/K7XWA=
+github.com/neputevshina/geom v0.0.0-20241106004821-c16f11df4ba9/go.mod h1:RcgNVL/f6DPTQtCjCKW9x4WXUa421NKaBenrAnOPSl0=
 github.com/neputevshina/nanowarp v0.5.3 h1:yl69leI/TA95SZv9SnTFPHpG8b6SdWhfYJ4sLTBGQ9o=
 github.com/neputevshina/nanowarp v0.5.3/go.mod h1:XOACA67tQ2tmswao59GwafZh3BMTBXRfmXtkOrZYntE=
 golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 h1:ex206bKw+v3K0dm3andkrIF+ijyQKJG1pLgwQ2PYdQM=

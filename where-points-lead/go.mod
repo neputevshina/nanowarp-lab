@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/neputevshina/geom v0.0.0-20241106004821-c16f11df4ba9 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 )

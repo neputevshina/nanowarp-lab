@@ -3,9 +3,9 @@ package main
 import (
 	"io"
 	"math"
-	"math/cmplx"
 	"slices"
 
+	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanowarp/dspio"
 	"github.com/neputevshina/nanowarp/oscope"
 	"gonum.org/v1/gonum/dsp/fourier"
@@ -25,6 +25,9 @@ type warper struct {
 	arm         [][]bool // PGHI done mask
 	norm, wgain float64  // Global normalization factor and grain-only normalization factor
 	heap        hp       // PGHI heap
+
+	points []geom.Point
+	j      float64
 
 	a wbufs
 }
@@ -54,10 +57,83 @@ func (w *warper) process(ain dspio.SignalReader) error {
 		}
 		w.advance(agrain)
 	}
+
+	j := int(w.j)
+	cnv := make2(j, w.nbins)
+	for _, p := range w.points {
+		e := &cnv[int(math.Round(clamp(0, w.j-1, p.Y)))][int(math.Round(clamp(0, float64(w.nbins-1), p.X)))]
+		*e = min(*e+1, float64(w.olap)*2)
+	}
+
+	for _, sl := range cnv {
+		slices.Reverse(sl)
+		oscope.Oscope(sl, oscope.Name(`densbin`))
+	}
+
 	if err == io.EOF {
 		err = nil
 	}
 	return nil
+}
+
+func (n *warper) advance(presenta [][]float64) {
+	a := &n.a
+
+	n.j++
+	n.analyze(presenta, a.C, a.Fadv, a.Tadv, a.M, a.Mid)
+	for i := range n.nbins {
+		n.points = append(n.points, geom.Pt(float64(i)+a.Fadv[i], n.j))
+		// n.points = append(n.points, geom.Pt(a.Fadv[i], n.j))
+		n.points = append(n.points, geom.Pt(float64(i), n.j+a.Tadv[i]))
+	}
+
+	oscope.Oscope(slices.Clone(a.Fadv), oscope.Name(`x`))
+	oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`y`))
+	// oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`x`))
+
+	// n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
+
+	// for w := range a.Ph {
+	// 	a.Past[w] = princarg(a.Ph[w])
+	// }
+	// copy(a.P, a.M)
+
+}
+
+func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64) {
+	a := &n.a
+
+	clear(Mid)
+	for ch := range present {
+		floats.Add(Mid, present[ch])
+		n.enfft(C[ch], a.W, present[ch])
+	}
+
+	n.enfft(a.X, a.W, Mid)
+	n.enfft(a.Xd, a.Wd, Mid)
+	n.enfft(a.Xt, a.Wt, Mid)
+	n.enfft(a.Y, a.Wdt, Mid)
+
+	for w := range a.X {
+		Fadv[w] = getx(a.X, a.Xd, w) / float64(n.hop)
+		// Fadv[w] = getfadv(a.X, a.Xt, 2./n.osamp)(w)
+		Tadv[w] = gety(a.X, a.Xt, 1, w)
+	}
+
+	for w := range a.X {
+		m := mag(a.X[w])
+		p := a.X[w] / complex(m, 0)
+		if m < 1e-6 {
+			p = complex(1, 0)
+		}
+		M[w] = m
+		a.Y[w] = p
+	}
+	for ch := range present {
+		for w := range a.X {
+			C[ch][w] /= a.Y[w]
+		}
+	}
 }
 
 func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
@@ -112,141 +188,23 @@ func (n *warper) enfft(x []complex128, w, grain []float64) {
 	n.fft.Coefficients(x, a.S)
 }
 
-func (n *warper) defft(out []float64, x []complex128, w bool) {
-	a := &n.a
-	n.fft.Sequence(a.S, x)
-	floats.Scale(1./n.norm, a.S)
-	if w {
-		mul(a.S, a.Wr)
+func gety(x, xt []complex128, stretch float64, j int) float64 {
+	if mag(x[j]) == 0 {
+		return 0
 	}
-	copy(out, a.S)
+	e := -real(xt[j]/x[j]) / float64(len(x)) / math.Pi / 2
+	e = math.Copysign(bitsafe(math.Log(abs(e))), e)
+	return e
 }
 
-func (n *warper) resetPast(present [][]float64) {
-	a := &n.a
-	clear(a.Mid)
-	for ch := range present {
-		floats.Add(a.Mid, present[ch])
-		n.enfft(a.C[ch], a.W, present[ch])
+func getx(x, xd []complex128, j int) float64 {
+	if mag(x[j]) < 1e-6 {
+		return 0
 	}
-	n.enfft(a.X, a.W, a.Mid)
-	for w := range a.Ph {
-		a.P[w], a.Past[w] = cmplx.Polar(a.X[w])
-	}
-}
+	e := imag(xd[j] / x[j])
+	e = math.Copysign(bitsafe(math.Log(abs(e))), e)
 
-func (n *warper) bash(present [][]float64, C [][]complex128, M, Ph []float64, Mid []float64) {
-	a := &n.a
-	clear(Mid)
-	for ch := range present {
-		floats.Add(Mid, present[ch])
-		n.enfft(C[ch], a.W, present[ch])
-	}
-	n.enfft(a.X, a.W, Mid)
-	for w := range n.nbins {
-		M[w], Ph[w] = cmplx.Polar(a.X[w])
-	}
-}
-
-func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64) {
-	a := &n.a
-
-	clear(Mid)
-	for ch := range present {
-		floats.Add(Mid, present[ch])
-		n.enfft(C[ch], a.W, present[ch])
-	}
-
-	n.enfft(a.X, a.W, Mid)
-	n.enfft(a.Xd, a.Wd, Mid)
-	n.enfft(a.Xt, a.Wt, Mid)
-	n.enfft(a.Y, a.Wdt, Mid)
-
-	for w := range a.X {
-		Fadv[w] = princarg(getfadv(a.X, a.Xt, 2./n.osamp)(w))
-		Tadv[w] = tdx(a.X, a.Xd, w, float64(n.olap)*n.osamp)
-	}
-
-	for w := range a.X {
-		m := mag(a.X[w])
-		p := a.X[w] / complex(m, 0)
-		if m < 1e-6 {
-			p = complex(1, 0)
-		}
-		M[w] = m
-		a.Y[w] = p
-	}
-	for ch := range present {
-		for w := range a.X {
-			C[ch][w] /= a.Y[w]
-		}
-	}
-}
-
-func (n *warper) integrate(Fadv, Tadv, M [][]float64, Ph [][]float64, arm [][]bool) {
-	n.heap = n.heap[:0]
-	clear(n.heap)
-
-	// Frames on sides of the framebuffer are the past frame after the
-	// previous transient, and the future frame, which is the first
-	// frame of a transient.
-	//
-	// They are ground truths for the current step of integration, so they are
-	// added to the heap and not armed for phase reconstruction.
-	for t := range Ph {
-		if t > 0 && t < n.lah {
-			fill(arm[t], true)
-		} else {
-			fill(arm[t], false)
-			for w := range n.nbins {
-				n.heap = append(n.heap, heaptriple{M[t][w], w, t})
-			}
-		}
-	}
-	heapInit(&n.heap)
-
-	// Do PGHI.
-	for len(n.heap) > 0 {
-		h := heapPop(&n.heap)
-		w, t := h.w, h.t
-		if t >= 1 && arm[t-1][w] {
-			Ph[t-1][w] = Ph[t][w] - Tadv[t-1][w]
-			arm[t-1][w] = false
-			heapPush(&n.heap, heaptriple{M[t-1][w], w, t - 1})
-		}
-		if t < len(Ph)-1 && arm[t+1][w] {
-			Ph[t+1][w] = Ph[t][w] + Tadv[t+1][w]
-			arm[t+1][w] = false
-			heapPush(&n.heap, heaptriple{M[t+1][w], w, t + 1})
-		}
-		if w >= 1 && arm[t][w-1] {
-			Ph[t][w-1] = Ph[t][w] - Fadv[t][w-1]
-			arm[t][w-1] = false
-			heapPush(&n.heap, heaptriple{M[t][w-1], w - 1, t})
-		}
-		if w < n.nbins-1 && arm[t][w+1] {
-			Ph[t][w+1] = Ph[t][w] + Fadv[t][w+1]
-			arm[t][w+1] = false
-			heapPush(&n.heap, heaptriple{M[t][w+1], w + 1, t})
-		}
-	}
-}
-
-func (n *warper) advance(presenta [][]float64) {
-	a := &n.a
-
-	n.analyze(presenta, a.C, a.Fadv, a.Tadv, a.M, a.Mid)
-
-	oscope.Oscope(slices.Clone(a.Fadv), oscope.Name(`y`))
-	oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`x`))
-
-	// n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
-
-	// for w := range a.Ph {
-	// 	a.Past[w] = princarg(a.Ph[w])
-	// }
-	// copy(a.P, a.M)
-
+	return e
 }
 
 func getfadv(x, xt []complex128, stretch float64) func(w int) float64 {
@@ -258,17 +216,6 @@ func getfadv(x, xt []complex128, stretch float64) func(w int) float64 {
 		// FIXME Works ONLY with nbuf=4096, nfft=8192 (oversampling 2).
 		return -real(xt[j]/x[j])/float64(len(x))*math.Pi*stretch - math.Pi/2
 	}
-}
-
-func tdx(x, xd []complex128, j int, olap float64) float64 {
-	if mag(x[j]) < 1e-6 {
-		return 0
-	}
-	e := imag(xd[j]/x[j]) / (olap / 2)
-	if abs(e) > olap/2 {
-		e = math.Copysign(olap/2, e)
-	}
-	return e
 }
 
 func gettadv(x, xd []complex128, olap float64) func(w int) float64 {
