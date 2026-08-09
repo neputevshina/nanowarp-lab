@@ -120,7 +120,7 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid [
 
 	for w := range a.X {
 		Px[w] = get6(a.X, a.Xd, w)
-		Py[w] = get9(a.X, a.Xt, w) / float64(n.hop)
+		Py[w] = -get9(a.X, a.Xt, w) / float64(n.hop)
 	}
 
 	for w := range a.X {
