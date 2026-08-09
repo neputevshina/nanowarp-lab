@@ -36,7 +36,7 @@ type wbufs struct {
 	Mid, S                     []float64      // Scratch buffers
 	Ph, M, P, F                []float64      `size:"nbins"` // Current phase
 	Past, Future               []float64      // Phase accumulators
-	Fadv, Tadv                 []float64      `size:"nbins"`
+	Px, Py                     []float64      `size:"nbins"`
 	W, Wr, Wd, Wt, Wdt         []float64      // Window functions
 	X, Y, Xd, Xt, L, R, Lo, Ro []complex128   // Complex spectra
 	C, Co                      [][]complex128 // Channels
@@ -62,7 +62,7 @@ func (w *warper) process(ain dspio.SignalReader) error {
 	cnv := make2(j, w.nbins)
 	for _, p := range w.points {
 		e := &cnv[int(math.Round(clamp(0, w.j-1, p.Y)))][int(math.Round(clamp(0, float64(w.nbins-1), p.X)))]
-		*e = min(*e+1, float64(w.olap)*2)
+		*e = min(*e+1, 8)
 	}
 
 	for _, sl := range cnv {
@@ -80,15 +80,20 @@ func (n *warper) advance(presenta [][]float64) {
 	a := &n.a
 
 	n.j++
-	n.analyze(presenta, a.C, a.Fadv, a.Tadv, a.M, a.Mid)
+	n.analyze(presenta, a.C, a.Px, a.Py, a.M, a.Mid)
 	for i := range n.nbins {
-		n.points = append(n.points, geom.Pt(float64(i)+a.Fadv[i], n.j))
+		n.points = append(n.points, geom.Pt(float64(i)+a.Px[i], n.j))
 		// n.points = append(n.points, geom.Pt(a.Fadv[i], n.j))
-		n.points = append(n.points, geom.Pt(float64(i), n.j+a.Tadv[i]))
+		n.points = append(n.points, geom.Pt(float64(i), n.j+a.Py[i]))
 	}
 
-	oscope.Oscope(slices.Clone(a.Fadv), oscope.Name(`x`))
-	oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`y`))
+	crop := func(e float64) float64 { return math.Copysign(bitsafe(math.Log(abs(e))), e) }
+	for i := range a.Px {
+		a.Px[i] = crop(a.Px[i])
+		a.Py[i] = crop(a.Py[i])
+	}
+	oscope.Oscope(slices.Clone(a.Px), oscope.Name(`x`))
+	oscope.Oscope(slices.Clone(a.Py), oscope.Name(`y`))
 	// oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`x`))
 
 	// n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
@@ -100,7 +105,7 @@ func (n *warper) advance(presenta [][]float64) {
 
 }
 
-func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, Mid []float64) {
+func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid []float64) {
 	a := &n.a
 
 	clear(Mid)
@@ -112,12 +117,10 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Fadv, Tadv, M, M
 	n.enfft(a.X, a.W, Mid)
 	n.enfft(a.Xd, a.Wd, Mid)
 	n.enfft(a.Xt, a.Wt, Mid)
-	n.enfft(a.Y, a.Wdt, Mid)
 
 	for w := range a.X {
-		Fadv[w] = getx(a.X, a.Xd, w) / float64(n.hop)
-		// Fadv[w] = getfadv(a.X, a.Xt, 2./n.osamp)(w)
-		Tadv[w] = gety(a.X, a.Xt, 1, w)
+		Px[w] = get6(a.X, a.Xd, w)
+		Py[w] = get9(a.X, a.Xt, w) / float64(n.hop)
 	}
 
 	for w := range a.X {
@@ -188,22 +191,19 @@ func (n *warper) enfft(x []complex128, w, grain []float64) {
 	n.fft.Coefficients(x, a.S)
 }
 
-func gety(x, xt []complex128, stretch float64, j int) float64 {
+func get9(x, xt []complex128, j int) float64 {
 	if mag(x[j]) == 0 {
 		return 0
 	}
-	e := -real(xt[j]/x[j]) / float64(len(x)) / math.Pi / 2
-	e = math.Copysign(bitsafe(math.Log(abs(e))), e)
+	e := -real(xt[j] / x[j])
 	return e
 }
 
-func getx(x, xd []complex128, j int) float64 {
+func get6(x, xd []complex128, j int) float64 {
 	if mag(x[j]) < 1e-6 {
 		return 0
 	}
-	e := imag(xd[j] / x[j])
-	e = math.Copysign(bitsafe(math.Log(abs(e))), e)
-
+	e := imag(xd[j]/x[j]) / math.Pi / 2
 	return e
 }
 
