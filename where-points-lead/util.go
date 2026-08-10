@@ -394,3 +394,21 @@ func make3(k, j, i int) [][][]float64 {
 }
 
 func delay[T any](v T) func() T { return func() T { return v } }
+
+type (
+	F = float64
+)
+
+func bend(x F, outsize F, insize F, start F) F {
+	exp := math.Exp
+	log := math.Log
+	return start * exp(x*log(outsize/start)/insize)
+}
+
+func unbend(x F, outsize F, insize F, start F) F {
+	log := math.Log
+	if x < start {
+		return 0
+	}
+	return insize * log(x/start) / log(outsize/start)
+}

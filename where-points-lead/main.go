@@ -5,13 +5,12 @@ import (
 	"os"
 
 	"github.com/neputevshina/nanowarp/dspio/wavio"
-	"github.com/neputevshina/nanowarp/oscope"
 )
 
 var finputa = flag.String("a", "", "source a WAV")
 
 func main() {
-	oscope.Enable = true
+	Enable = true
 	flag.Parse()
 
 	fa, err := os.Open(*finputa)
@@ -21,13 +20,13 @@ func main() {
 
 	wsa, err := wavio.NewDecoder(fa)
 
-	dt := warperNew(4096, 1, 16, 2)
+	dt := warperNew(4096, 1, 8, 2)
 	err = dt.process(wsa)
 	if err != nil {
 		panic(err)
 	}
 
-	err = oscope.Dump(nil, `disp`)
+	err = Dump(nil, `disp`)
 	if err != nil {
 		panic(err)
 	}

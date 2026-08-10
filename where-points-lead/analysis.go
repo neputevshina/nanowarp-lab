@@ -3,11 +3,11 @@ package main
 import (
 	"io"
 	"math"
+	"math/cmplx"
 	"slices"
 
 	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanowarp/dspio"
-	"github.com/neputevshina/nanowarp/oscope"
 	"gonum.org/v1/gonum/dsp/fourier"
 	"gonum.org/v1/gonum/floats"
 )
@@ -59,17 +59,17 @@ func (w *warper) process(ain dspio.SignalReader) error {
 	}
 
 	j := int(w.j)
-	cnv := make2(j, w.nbins)
-	for _, p := range w.points {
-		e := &cnv[int(math.Round(clamp(0, w.j-1, p.Y)))][int(math.Round(clamp(0, float64(w.nbins-1), p.X)))]
-		*e = min(*e+1, 8)
+	{
+		cnv := make2(j, w.nbins)
+		for _, p := range w.points {
+			e := &cnv[int(math.Round(clamp(0, w.j-1, p.Y)))][int(math.Round(clamp(0, float64(w.nbins-1), p.X)))]
+			*e = min(*e+1, 8)
+		}
+		for _, sl := range cnv {
+			slices.Reverse(sl)
+			Oscope(sl, Name(`densbin`))
+		}
 	}
-
-	for _, sl := range cnv {
-		slices.Reverse(sl)
-		oscope.Oscope(sl, oscope.Name(`densbin`))
-	}
-
 	if err == io.EOF {
 		err = nil
 	}
@@ -81,19 +81,34 @@ func (n *warper) advance(presenta [][]float64) {
 
 	n.j++
 	n.analyze(presenta, a.C, a.Px, a.Py, a.M, a.Mid)
+
 	for i := range n.nbins {
 		n.points = append(n.points, geom.Pt(float64(i)+a.Px[i], n.j))
 		// n.points = append(n.points, geom.Pt(a.Fadv[i], n.j))
 		n.points = append(n.points, geom.Pt(float64(i), n.j+a.Py[i]))
 	}
 
-	crop := func(e float64) float64 { return math.Copysign(bitsafe(math.Log(abs(e))), e) }
+	// crop := func(e float64) float64 { return math.Copysign(bitsafe(math.Sqrt(abs(e))), e) }
+	ue := slices.Clone(a.Px)
+	uo := slices.Clone(a.Px)
 	for i := range a.Px {
-		a.Px[i] = crop(a.Px[i])
-		a.Py[i] = crop(a.Py[i])
+		a.Px[i] = clamp(-4, 4, a.Px[i])
+		a.Py[i] = clamp(-4, 4, a.Py[i])
+		ue[i], uo[i] = cmplx.Polar(complex(a.Px[i], a.Py[i]))
 	}
-	oscope.Oscope(slices.Clone(a.Px), oscope.Name(`x`))
-	oscope.Oscope(slices.Clone(a.Py), oscope.Name(`y`))
+	slices.Reverse((a.Px))
+	slices.Reverse((a.Py))
+	slices.Reverse((ue))
+	slices.Reverse((uo))
+	Oscope(slices.Clone(a.Px), Name(`x`))
+	Oscope(slices.Clone(a.Py), Name(`y`))
+	Oscope(slices.Clone(ue), Name(`mag`))
+	Oscope(slices.Clone(uo), Name(`phase`))
+	for i := range a.Px {
+		a.M[i] = math.Log(a.M[i] + 1)
+	}
+	slices.Reverse(a.M)
+	Oscope(slices.Clone(a.M), Name(`justmag`))
 	// oscope.Oscope(slices.Clone(a.Tadv), oscope.Name(`x`))
 
 	// n.integrate([][]float64{nil, a.Fadv}, [][]float64{nil, a.Tadv}, [][]float64{a.P, a.M}, [][]float64{a.Past, a.Ph}, n.arm)
