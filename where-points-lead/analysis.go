@@ -33,11 +33,11 @@ type warper struct {
 }
 
 type wbufs struct {
-	Mid, S                     []float64      // Scratch buffers
+	Mid, S, T                  []float64      // Scratch buffers
 	Ph, M, P, F                []float64      `size:"nbins"` // Current phase
 	Past, Future               []float64      // Phase accumulators
-	Px, Py                     []float64      `size:"nbins"`
-	W, Wr, Wd, Wt, Wdt         []float64      // Window functions
+	Px, Py, Cone               []float64      `size:"nbins"`
+	W, Wr, Wd, Wt, Wdt, Wcone  []float64      // Window functions
 	X, Y, Xd, Xt, L, R, Lo, Ro []complex128   // Complex spectra
 	C, Co                      [][]complex128 // Channels
 
@@ -80,7 +80,7 @@ func (n *warper) advance(presenta [][]float64) {
 	a := &n.a
 
 	n.j++
-	n.analyze(presenta, a.C, a.Px, a.Py, a.M, a.Mid)
+	n.analyze(presenta, a.C, a.Px, a.Py, a.M, a.Mid, a.Cone)
 
 	for i := range n.nbins {
 		n.points = append(n.points, geom.Pt(float64(i)+a.Px[i], n.j))
@@ -100,10 +100,12 @@ func (n *warper) advance(presenta [][]float64) {
 	slices.Reverse((a.Py))
 	slices.Reverse((ue))
 	slices.Reverse((uo))
+	slices.Reverse(a.Cone)
 	Oscope(slices.Clone(a.Px), Name(`x`))
 	Oscope(slices.Clone(a.Py), Name(`y`))
 	Oscope(slices.Clone(ue), Name(`mag`))
 	Oscope(slices.Clone(uo), Name(`phase`))
+	Oscope(slices.Clone(a.Cone), Name(`cone`))
 	for i := range a.Px {
 		a.M[i] = math.Log(a.M[i] + 1)
 	}
@@ -120,22 +122,27 @@ func (n *warper) advance(presenta [][]float64) {
 
 }
 
-func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid []float64) {
+func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid, Cone []float64) {
 	a := &n.a
 
 	clear(Mid)
 	for ch := range present {
-		floats.Add(Mid, present[ch])
+		floats.Add(Mid[:len(present[ch])], present[ch])
 		n.enfft(C[ch], a.W, present[ch])
 	}
+
+	n.coneShapeKernel(Cone, Mid)
 
 	n.enfft(a.X, a.W, Mid)
 	n.enfft(a.Xd, a.Wd, Mid)
 	n.enfft(a.Xt, a.Wt, Mid)
 
 	for w := range a.X {
-		Px[w] = get6(a.X, a.Xd, w)
-		Py[w] = -get9(a.X, a.Xt, w) / float64(n.hop)
+		f := float64(w) / float64(n.nbins)
+		// Px[w] = cif(a.X, a.Xd, w) * n.osamp
+		// Py[w] = -lgd(a.X, a.Xt, w) / float64(n.hop)
+		Px[w] = f + maghor(a.X, a.Xd, w) /// math.Pow(math.Pi*2, 2)
+		// Py[w] = magvert(a.X, a.Xt, w) / float64(n.hop) / math.Pi * 2
 	}
 
 	for w := range a.X {
@@ -151,6 +158,25 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid [
 		for w := range a.X {
 			C[ch][w] /= a.Y[w]
 		}
+	}
+}
+
+func (n *warper) coneShapeKernel(out, Mid []float64) {
+	// https://en.wikipedia.org/wiki/Cone-shape_distribution_function
+	a := &n.a
+
+	n.enfft(a.X, nil, Mid)
+
+	for w := range a.X {
+		a.X[w] *= cmplx.Conj(a.X[w])
+	}
+
+	n.defft(a.T, a.X, nil, false)
+	// slices.Reverse(a.T)
+	n.enfft(a.X, a.Wcone, a.T)
+
+	for w := range a.X {
+		out[w] = math.Log1p(max(0, 4*real(a.X[w])))
 	}
 }
 
@@ -184,6 +210,8 @@ func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
 	windowDx(s(a.W), s(a.Wd))
 	windowT(s(a.W), s(a.Wt))
 	windowT(s(a.Wd), s(a.Wdt))
+	copy(a.Wcone, s(a.W))
+	a.Wcone[nbuf/2-1] *= 0.5
 
 	copy(s(a.Wr), s(a.W))
 	slices.Reverse(s(a.Wr))
@@ -206,7 +234,19 @@ func (n *warper) enfft(x []complex128, w, grain []float64) {
 	n.fft.Coefficients(x, a.S)
 }
 
-func get9(x, xt []complex128, j int) float64 {
+func (n *warper) defft(out []float64, x []complex128, w []float64, noscale bool) {
+	a := &n.a
+	n.fft.Sequence(a.S, x)
+	if !noscale {
+		floats.Scale(1./n.norm, a.S)
+	}
+	if w != nil {
+		mul(a.S, w)
+	}
+	copy(out, a.S)
+}
+
+func lgd(x, xt []complex128, j int) float64 {
 	if mag(x[j]) == 0 {
 		return 0
 	}
@@ -214,7 +254,7 @@ func get9(x, xt []complex128, j int) float64 {
 	return e
 }
 
-func get6(x, xd []complex128, j int) float64 {
+func cif(x, xd []complex128, j int) float64 {
 	if mag(x[j]) < 1e-6 {
 		return 0
 	}
@@ -222,22 +262,18 @@ func get6(x, xd []complex128, j int) float64 {
 	return e
 }
 
-func getfadv(x, xt []complex128, stretch float64) func(w int) float64 {
-	return func(j int) float64 {
-		if mag(x[j]) == 0 {
-			return 0
-		}
-		// NOTE Try len(x)-1 instead. Sounds worse on my $4 speakers.
-		// FIXME Works ONLY with nbuf=4096, nfft=8192 (oversampling 2).
-		return -real(xt[j]/x[j])/float64(len(x))*math.Pi*stretch - math.Pi/2
+func magvert(x, xt []complex128, j int) float64 {
+	if mag(x[j]) == 0 {
+		return 0
 	}
+	e := imag(xt[j] / x[j])
+	return e
 }
 
-func gettadv(x, xd []complex128, olap float64) func(w int) float64 {
-	return func(j int) float64 {
-		if mag(x[j]) < 1e-6 {
-			return 0
-		}
-		return (math.Pi*float64(j) + imag(xd[j]/x[j])) / (olap / 2)
+func maghor(x, xd []complex128, j int) float64 {
+	if mag(x[j]) < 1e-6 {
+		return 0
 	}
+	e := real(xd[j]/x[j]) / math.Pi / 2
+	return e
 }
