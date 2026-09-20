@@ -138,11 +138,15 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid, 
 	n.enfft(a.Xt, a.Wt, Mid)
 
 	for w := range a.X {
-		f := float64(w) / float64(n.nbins)
+		// Default TFR:
 		// Px[w] = cif(a.X, a.Xd, w) * n.osamp
 		// Py[w] = -lgd(a.X, a.Xt, w) / float64(n.hop)
-		Px[w] = f + maghor(a.X, a.Xd, w) /// math.Pow(math.Pi*2, 2)
-		// Py[w] = magvert(a.X, a.Xt, w) / float64(n.hop) / math.Pi * 2
+
+		// Amplidude reassignment, see section 3 of
+		// “Hainsworth, Stephen, and Malcolm Macleod. Time frequency reassignment:
+		// A review and analysis. University of Cambridge, Department of Engineering, 2003.”
+		Px[w] = magvert(a.X, a.Xt, w) / float64(n.hop)
+		Py[w] = maghor(a.X, a.Xd, w) * n.osamp
 	}
 
 	for w := range a.X {

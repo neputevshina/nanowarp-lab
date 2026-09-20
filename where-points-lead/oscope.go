@@ -29,11 +29,12 @@ type Name string
 type Normalize bool
 
 type watch struct {
-	outfile string
-	elem    any
-	data    []any
-	etc     []Etc
-	norm    bool
+	outfile  string
+	elem     any
+	data     []any
+	etc      []Etc
+	norm     bool
+	min, max float64
 }
 
 // It's okay to get goroutine ID for debugging purposes,
@@ -157,6 +158,10 @@ func dumpTexture[T constraints.Integer | constraints.Float](err error, w *watch,
 			x = max(x, e)
 		}
 	}
+
+	w.min, w.max = float64(n), float64(x)
+
+	println(w.outfile, n, x)
 
 	height := len(data[0].(S))
 	width := len(data)
