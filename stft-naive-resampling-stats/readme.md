@@ -1,0 +1,1 @@
+What possible pitch values could you get by resampling with two FFTs with valid PFFFT sizes? Not many.
