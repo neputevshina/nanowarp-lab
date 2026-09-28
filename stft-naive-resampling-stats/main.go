@@ -11,19 +11,16 @@ type bang struct{}
 
 func main() {
 	basenfft := 3600 * 2
-	nfft2 := 16384
-	s1 := map[float64]bang{}
-	s2 := map[float64]bang{}
+	s1 := map[float64]struct{}{}
 	sizes := map[float64]bang{}
 	for n := basenfft / 2; n <= basenfft*2; n++ {
 		s1[float64(basenfft)/float64(NearestNfft(n))] = bang{}
 	}
-	for m := nfft2 / 2; m <= nfft2*2; m++ {
-		s2[float64(nfft2)/float64(NearestNfft(m))] = bang{}
-	}
 	for a := range s1 {
-		for b := range s2 {
-			sizes[a*b] = bang{}
+		for b := range s1 {
+			for c := range s1 {
+				sizes[a*b*c] = bang{}
+			}
 		}
 	}
 	for s := range sizes {
