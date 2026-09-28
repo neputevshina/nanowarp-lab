@@ -20,9 +20,9 @@ import (
 //
 // It does not try to write to wr if it is nil. Changing gr.Hop while this routine is working will
 // produce broken synthesis result.
-func StftHandle(gr dspio.GrainReader, wr dspio.SignalWriter,
+func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
 	fft pffft.Fourier, window []float64, future int, past int,
-	consumer func(out [][]complex128, frames [][][]complex128)) error {
+	consumer func(out [][]complex128, frames [][][]complex128, preanalyze bool)) error {
 	nch := gr.NchRead()
 	if nch != wr.NchWrite() {
 		panic(`StftHandle: different number of channels between reader and writer`)
@@ -59,11 +59,11 @@ func StftHandle(gr dspio.GrainReader, wr dspio.SignalWriter,
 			floats.Mul(grain[ch], window)
 			fft.Coefficients(frames[last][ch], grain[ch])
 		}
+		consumer(out, frames, countdown > 0)
 		if countdown > 0 { // Accumulate lookahead.
 			countdown--
 			continue
 		}
-		consumer(out, frames)
 		for ch := range nch {
 			fft.Sequence(grain[ch], out[ch])
 			floats.Scale(1/(float64(nfft)*float64(gr.Hop)*norm), grain[ch])
