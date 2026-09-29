@@ -17,6 +17,7 @@ import (
 )
 
 var finputa = flag.String("a", "", "source a WAV")
+var ftonal = flag.Bool("t", false, "output tonals")
 
 func main() {
 	flag.Parse()
@@ -49,7 +50,7 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 3
+		trlen  = 6
 		height = 1
 		infl   = 5
 	)
@@ -59,7 +60,7 @@ func main() {
 	mag := make([]float64, nbins)
 	pmags := make2[float64](p.Nch, nbins)
 	ridges := make2[uint](p.Nch, nbins)
-	trace := make3[float64](p.Nch, trlen+1, nbins)
+	trace := make3[float64](p.Nch, trlen, nbins)
 	traceaccum := make2[float64](p.Nch, nbins)
 	// armget := func(t, w int) bool {
 	// 	if t != 0 {
@@ -79,6 +80,8 @@ func main() {
 	rl := bits.OnesCount(ridgemask)
 	common.StftHandle(gr, wavw, fft, kaiser(nfft, 3), trlen, 0, func(out [][]complex128, frames [][][]complex128, preanalyze bool) {
 		for ch := range out {
+			rotate(trace[ch])
+
 			heap = heap[:nbins]
 			cmplxs.Abs(mag, frames[len(frames)-1][ch])
 			for w := range mag {
@@ -127,26 +130,30 @@ func main() {
 				// 	}
 				// }
 			}
-			trace[ch][len(trace)-1] = trackridges(trace[ch][len(trace)-1], traceaccum[ch], ridges[ch], height, infl)
 
-			// for w := range mag {
-			// 	trace[ch][len(trace)-1][w] = boolfloat(traceaccum[w] >= 1)
-			// }
+			copy(trace[ch][trlen-1], trace[ch][trlen-2])
+			trackridges(trace[ch][trlen-1], ridges[ch], height)
+
 			backprop(trace[ch])
-			rotate(trace[ch])
 			copy(pmags[ch], mag)
-
 		}
-		oscope.Oscope(slices.Clone(traceaccum[0]), oscope.Name(`accum`))
-		oscope.Oscope(slices.Clone(trace[0][0]), oscope.Name(`trace`))
 
 		if !preanalyze {
 			for ch := range out {
+				fatten(traceaccum[ch], trace[ch][1], ridges[ch], infl)
 				for w := range mag {
-					out[ch][w] = frames[0][ch][w] * complex(boolfloat(trace[1][ch][w] < trlen), 0)
+					c := traceaccum[ch][w]
+					what := c < trlen
+					if *ftonal {
+						what = c >= trlen
+					}
+					out[ch][w] = frames[0][ch][w] * complex(boolfloat(what), 0)
 				}
 			}
 		}
+
+		// oscope.Oscope(slices.Clone(traceaccum[0]), oscope.Name(`accum`))
+		// oscope.Oscope(slices.Clone(trace[0][0]), oscope.Name(`trace`))
 	})
 	oscope.Dump(nil, ".")
 }
@@ -160,7 +167,7 @@ const (
 	ridgemask = right | down | up | topleft | topright
 )
 
-func trackridges(out, trace []float64, ridges []uint, octheight float64, InfluenceRadius int) []float64 {
+func trackridges(trace []float64, ridges []uint, octheight float64) {
 	rl := bits.OnesCount(ridgemask)
 	for w, v := range ridges {
 		p := boolfloat(bits.OnesCount(v&(ridgemask<<rl)) >= 2)
@@ -173,7 +180,7 @@ func trackridges(out, trace []float64, ridges []uint, octheight float64, Influen
 		log := math.Log2
 		type f = float64
 		v := oct * (log(f(i)) - log(1))
-		return int(max(1, v))
+		return int(max(3, v))
 	}
 	for i := range trace {
 		if l < 0 && trace[i] != 0 {
@@ -194,6 +201,10 @@ func trackridges(out, trace []float64, ridges []uint, octheight float64, Influen
 	if l > 0 {
 		fill(trace[l:], slices.Max(trace[l:]))
 	}
+}
+
+func fatten(out, trace []float64, ridges []uint, InfluenceRadius int) {
+	rl := bits.OnesCount(ridgemask)
 	// Propagate each trace to its native (per PGHI directions) region of influence,
 	// limited by InfluenceRadius hyperparameter.
 	clear(out)
@@ -223,8 +234,6 @@ func trackridges(out, trace []float64, ridges []uint, octheight float64, Influen
 		}
 		out[w] = v
 	}
-
-	return out
 }
 
 func backprop(traces [][]float64) {
