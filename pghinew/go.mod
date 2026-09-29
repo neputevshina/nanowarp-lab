@@ -4,7 +4,10 @@ go 1.26.2
 
 require github.com/neputevshina/nanowarp v0.6.13
 
-require gonum.org/v1/gonum v0.17.0 // indirect
+require (
+	golang.org/x/term v0.45.0 // indirect
+	gonum.org/v1/gonum v0.17.0
+)
 
 replace github.com/neputevshina/nanowarp-lab/common => ../common
 

@@ -1,7 +1,5 @@
 github.com/neputevshina/nanowarp v0.6.13 h1:BOTyoq3TIbO+2m8WY+L11vmySA50FN5ZjYknssc3XDc=
 github.com/neputevshina/nanowarp v0.6.13/go.mod h1:fD6YLoWCIhkjq2eEAM9mfVuo3wYWp/qu9e3pE55nabc=
-github.com/neputevshina/nanowarp-lab/common v0.0.0-20260928105720-cdd690ff1d27 h1:WmGZAsVDfjZSAVEnTQvEjkzo2V4fnSISqx/S74ypBm0=
-github.com/neputevshina/nanowarp-lab/common v0.0.0-20260928105720-cdd690ff1d27/go.mod h1:hezzRUNOtiODjBTwPKbQqMZ+1O64f2rmqowSGRYpWkw=
 golang.org/x/exp v0.0.0-20251002181428-27f1f14c8bb9 h1:TQwNpfvNkxAVlItJf6Cr5JTsVZoC/Sj7K3OZv2Pc14A=
 golang.org/x/exp v0.0.0-20251002181428-27f1f14c8bb9/go.mod h1:TwQYMMnGpvZyc+JpB/UAuTNIsVJifOlSkrZkhcvpVUk=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=

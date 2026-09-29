@@ -66,7 +66,7 @@ func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
 		}
 		for ch := range nch {
 			fft.Sequence(grain[ch], out[ch])
-			floats.Scale(1/(float64(nfft)*float64(gr.Hop)*norm), grain[ch])
+			floats.Scale(1/(float64(nfft)*float64(nfft)/float64(gr.Hop)*norm), grain[ch])
 			floats.Mul(grain[ch], dual)
 		}
 		_, werr := gw.SignalWrite(nil, grain)
