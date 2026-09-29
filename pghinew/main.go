@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"math"
 	"math/bits"
 	"os"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/neputevshina/nanowarp/dspio/wavio"
 	"github.com/neputevshina/nanowarp/oscope"
 	"github.com/neputevshina/nanowarp/pffft"
+	"golang.org/x/exp/constraints"
 	"gonum.org/v1/gonum/cmplxs"
 )
 
@@ -47,8 +49,8 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 12
-		height = 8
+		trlen  = 3
+		height = 1
 		infl   = 5
 	)
 
@@ -141,7 +143,7 @@ func main() {
 		if !preanalyze {
 			for ch := range out {
 				for w := range mag {
-					out[ch][w] = frames[0][ch][w] * complex(boolfloat(trace[1][ch][w] >= trlen), 0)
+					out[ch][w] = frames[0][ch][w] * complex(boolfloat(trace[1][ch][w] < trlen), 0)
 				}
 			}
 		}
@@ -158,7 +160,7 @@ const (
 	ridgemask = right | down | up | topleft | topright
 )
 
-func trackridges(out, trace []float64, ridges []uint, HighRidgeHeight, InfluenceRadius int) []float64 {
+func trackridges(out, trace []float64, ridges []uint, octheight float64, InfluenceRadius int) []float64 {
 	rl := bits.OnesCount(ridgemask)
 	for w, v := range ridges {
 		p := boolfloat(bits.OnesCount(v&(ridgemask<<rl)) >= 2)
@@ -167,6 +169,12 @@ func trackridges(out, trace []float64, ridges []uint, HighRidgeHeight, Influence
 
 	// Propagate vertically.
 	l := -1
+	height := func(oct float64, i int) int {
+		log := math.Log2
+		type f = float64
+		v := oct * (log(f(i)) - log(1))
+		return int(max(1, v))
+	}
 	for i := range trace {
 		if l < 0 && trace[i] != 0 {
 			l = i
@@ -174,7 +182,7 @@ func trackridges(out, trace []float64, ridges []uint, HighRidgeHeight, Influence
 		if l >= 0 && trace[i] == 0 {
 			v := slices.Max(trace[l:i])
 			// Reset the track on a PGHI-detected transient.
-			if i-l >= HighRidgeHeight {
+			if i-l >= height(octheight, i) {
 				v = 0
 			}
 			fill(trace[l:i], v)
@@ -215,6 +223,7 @@ func trackridges(out, trace []float64, ridges []uint, HighRidgeHeight, Influence
 		}
 		out[w] = v
 	}
+
 	return out
 }
 
@@ -275,4 +284,12 @@ func rotate[T any](frames []T) {
 	t := frames[0]
 	copy(frames, frames[1:])
 	frames[last] = t
+}
+
+func unmix[F constraints.Float](a, b, x F) F {
+	return (x - a) / (b - a)
+}
+
+func mix[F constraints.Float](a, b, x F) F {
+	return a*(1-x) + b*x
 }
