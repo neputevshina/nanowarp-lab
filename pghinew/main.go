@@ -50,7 +50,7 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 6
+		trlen  = 10
 		height = 1
 		infl   = 5
 	)
@@ -143,9 +143,22 @@ func main() {
 				fatten(traceaccum[ch], trace[ch][1], ridges[ch], infl)
 				for w := range mag {
 					c := traceaccum[ch][w]
-					what := c < trlen
+					tr := float64(trlen)
+					if w < nbins/2 {
+						tr -= 2
+					}
+					if w < nbins/4 {
+						tr -= 2
+					}
+					if w < nbins/8 {
+						tr -= 1
+					}
+					if w < nbins/16 {
+						tr -= 1
+					}
+					what := c < tr
 					if *ftonal {
-						what = c >= trlen
+						what = c >= tr
 					}
 					out[ch][w] = frames[0][ch][w] * complex(boolfloat(what), 0)
 				}
