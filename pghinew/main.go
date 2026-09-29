@@ -48,8 +48,8 @@ func main() {
 
 	const (
 		trlen  = 12
-		height = 5
-		infl   = 3
+		height = 8
+		infl   = 5
 	)
 
 	heap := make(hp, nbins)
@@ -130,8 +130,10 @@ func main() {
 			// for w := range mag {
 			// 	trace[ch][len(trace)-1][w] = boolfloat(traceaccum[w] >= 1)
 			// }
+			backprop(trace[ch])
 			rotate(trace[ch])
 			copy(pmags[ch], mag)
+
 		}
 		oscope.Oscope(slices.Clone(traceaccum[0]), oscope.Name(`accum`))
 		oscope.Oscope(slices.Clone(trace[0][0]), oscope.Name(`trace`))
@@ -214,6 +216,26 @@ func trackridges(out, trace []float64, ridges []uint, HighRidgeHeight, Influence
 		out[w] = v
 	}
 	return out
+}
+
+func backprop(traces [][]float64) {
+	for t := len(traces) - 2; t >= 0; t-- {
+		for w := range traces[t] {
+			if traces[t][w] > 0 {
+				traces[t][w] = max(traces[t][w], traces[t+1][w])
+			}
+		}
+		for w := 1; w < len(traces[t]); w++ {
+			if traces[t][w] > 0 {
+				traces[t][w] = max(traces[t][w-1], traces[t][w])
+			}
+		}
+		for w := len(traces[t]) - 1; w <= 0; w-- {
+			if traces[t][w] > 0 {
+				traces[t][w] = max(traces[t][w], traces[t][w+1])
+			}
+		}
+	}
 }
 
 func fill[T any](s []T, e T) {
