@@ -14,11 +14,11 @@ import (
 )
 
 var finputa = flag.String("a", "", "source WAV")
-var fhrad = flag.Int("h", 31, "horizontal radius")
-var fvrad = flag.Int("v", 31, "vertical radius")
+var fhrad = flag.Int("h", 19, "horizontal radius")
+var fvrad = flag.Int("v", 19, "vertical radius")
 var ftonal = flag.Bool("t", false, "output tonals")
-var fhperc = flag.Int("ph", 50, "horizontal percentile")
-var fvperc = flag.Int("pv", 50, "vertical percentile")
+var fhperc = flag.Int("ph", 0, "horizontal percentile")
+var fvperc = flag.Int("pv", 0, "vertical percentile")
 
 func main() {
 	flag.Parse()
@@ -59,44 +59,63 @@ func main() {
 	win := make([]float64, nfft)
 	fill(win, 1)
 
+	zeroh, zerov := *fhrad**fhperc/100 == 0, *fvrad**fvperc/100 == 0
 	bank := make([]*mediator[float64, struct{}], nbins)
 	for i := range bank {
-		bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, float64(*fhperc)/100)
+		if zeroh {
+			bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, 1)
+		} else {
+			bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, float64(*fhperc)/100)
+		}
 	}
 	vert := mediatorNew[float64, struct{}](*fvrad, *fvrad, float64(*fvperc)/100)
+	if zerov {
+		vert = mediatorNew[float64, struct{}](*fvrad, *fvrad, 1)
+	}
 	first := true
-	mid := make([]float64, nbins)
 	now := *fhrad
 	common.StftHandle(gr, wavw, fft, win, now, now, func(out [][]complex128, frames [][][]complex128, preanalyze bool) {
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
-				clear(mid)
+				mid := .0
 				for w := range nbins {
 					for ch := range out {
-						mid[w] += cmplx.Abs(frames[f][ch][w])
+						mid += cmplx.Abs(frames[f][ch][w])
 					}
-					bank[w].Insert(mid[w], struct{}{}) // Insert two times imitating the mirroring.
-					bank[w].Insert(mid[w], struct{}{}) // Order probably won't matter.
+					bank[w].Insert(mid, struct{}{}) // Insert two times imitating the mirroring.
+					bank[w].Insert(mid, struct{}{}) // Order probably won't matter.
 				}
 			}
 			first = false
 		}
-		clear(mid)
 		for w := range nbins {
+			mid := .0
 			for ch := range out {
-				mid[w] += cmplx.Abs(frames[len(frames)-1][ch][w])
+				mid += cmplx.Abs(frames[len(frames)-1][ch][w])
 			}
-			bank[w].Insert(mid[w], struct{}{})
+			if zeroh {
+				mid = -mid
+			}
+			bank[w].Insert(mid, struct{}{})
 		}
 		if !preanalyze {
-			clear(mid)
 			for w := range nbins {
+				mid := .0
 				for ch := range out {
-					mid[w] += cmplx.Abs(frames[now][ch][w])
+					mid += cmplx.Abs(frames[now][ch][w])
 				}
-				v, _ := vert.Filt(mid[w], struct{}{})
+				if zerov {
+					mid = -mid
+				}
+				v, _ := vert.Filt(mid, struct{}{})
+				if zerov {
+					v = -v
+				}
 				h, _ := bank[w].Take()
+				if zeroh {
+					h = -h
+				}
 				m := boolfloat(v > h)
 				if *ftonal {
 					m = 1 - m
