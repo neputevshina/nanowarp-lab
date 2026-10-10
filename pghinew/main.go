@@ -27,13 +27,17 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fo, err := os.Create("./output.wav")
+	name := "./perc.wav"
+	if *ftonal {
+		name = "./harm.wav"
+	}
+	fo, err := os.Create(name)
 	if err != nil {
 		panic(err)
 	}
 
-	nfft, hop := 3840, 640
-	nbins := nfft/2 + 1
+	const nfft, hop = 3840, 640
+	const nbins = nfft/2 + 1
 
 	wavr, err := wavio.NewDecoder(fa)
 	if err != nil {
@@ -50,7 +54,7 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 10
+		trlen  = 6
 		height = 1
 		infl   = 5
 	)
@@ -144,18 +148,18 @@ func main() {
 				for w := range mag {
 					c := traceaccum[ch][w]
 					tr := float64(trlen)
-					if w < nbins/2 {
-						tr -= 2
-					}
-					if w < nbins/4 {
-						tr -= 2
-					}
-					if w < nbins/8 {
-						tr -= 1
-					}
-					if w < nbins/16 {
-						tr -= 1
-					}
+					// if w < nbins/2 {
+					// 	tr -= 2
+					// }
+					// if w < nbins/4 {
+					// 	tr -= 2
+					// }
+					// if w < nbins/8 {
+					// 	tr -= 1
+					// }
+					// if w < nbins/16 {
+					// 	tr -= 1
+					// }
 					what := c < tr
 					if *ftonal {
 						what = c >= tr
