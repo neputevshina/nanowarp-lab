@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"math"
 	"math/cmplx"
 	"os"
 
@@ -54,10 +55,9 @@ func main() {
 	gr := dspio.NewGrainReader(nfft, hop, wavr)
 	fft := pffft.New(nfft)
 
-	// HPSS works best with a rectangular window.
-	// Probably because of unit main lobe width.
+	// HPSS works best with a window with the smallest main lobe width.
 	win := make([]float64, nfft)
-	fill(win, 1)
+	hann(win)
 
 	zeroh, zerov := *fhrad**fhperc/100 == 0, *fvrad**fvperc/100 == 0
 	bank := make([]*mediator[float64, struct{}], nbins)
@@ -184,4 +184,14 @@ func unmix[F constraints.Float](a, b, x F) F {
 
 func mix[F constraints.Float](a, b, x F) F {
 	return a*(1-x) + b*x
+}
+
+// hann is a Hann window function.
+//
+// Dual to itself (achieves COLA/perfect reconstruction) at any integer overlap greater than 2.
+func hann(out []float64) {
+	for i := range out {
+		x := float64(i) / float64(len(out))
+		out[i] = 0.5 * (1 - math.Cos(2*math.Pi*x))
+	}
 }
