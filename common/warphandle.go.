@@ -1,0 +1,78 @@
+package common
+
+import (
+	"io"
+
+	"github.com/neputevshina/nanowarp"
+	"github.com/neputevshina/nanowarp/dspio"
+	"github.com/neputevshina/nanowarp/pffft"
+	"gonum.org/v1/gonum/floats"
+)
+
+// WarpHandle automatically operates a time-uniform short-time Fourier transform pipleine.
+//
+// Same as [StftHandle], but all windows are applied and producer can push a frame (which will be inverted
+// with dual of windows[0]) anytime.
+//
+// frames of producer is addressed like [window][frame][channel][bin]complex128.
+//
+// It does not try to write to wr if it is nil. Changing gr.Hop while this routine is working will
+// produce broken synthesis result.
+func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter, phasor *nanowarp.Phasor,
+	fft pffft.Fourier, grainsize, synthhop int, windows [][]float64, future int, past int,
+	producer func(out [][]complex128, frames [][][][]complex128, preanalyze bool)) error {
+	nch := gr.NchRead()
+	if nch != wr.NchWrite() {
+		panic(`WarpHandle: different number of channels between reader and writer`)
+	}
+
+	dual, norm := windowDualUniform(windows[0], synthhop)
+	gw := dspio.NewGrainWriter(grainsize, synthhop, wr)
+	grain := make2[float64](gr.NchRead(), grainsize)
+	makebins := func() [][]complex128 { return make2[complex128](gr.NchRead(), fft.Len()/2+1) }
+	out := makebins()
+	frames := make([][][]complex128, future+past+1)
+	for n := range frames {
+		frames[n] = makebins()
+	}
+	last := future + past
+	countdown := future
+	countup := -1
+
+	nfft := fft.Len()
+	for {
+		if countup >= 0 {
+			countup++
+		} else {
+			_, rerr := gr.SignalRead(nil, grain)
+			if rerr == io.EOF {
+				countup = 0 // Prepare to close.
+			} else if rerr != nil {
+				return rerr
+			}
+		}
+		frames[last], frames[0] = frames[0], frames[last]
+		copy(frames, frames[1:])
+		for ch := range nch {
+			floats.Mul(grain[ch], window)
+			fft.Coefficients(frames[last][ch], grain[ch])
+		}
+		producer(out, frames, countdown > 0)
+		if countdown > 0 { // Accumulate lookahead.
+			countdown--
+			continue
+		}
+		for ch := range nch {
+			fft.Sequence(grain[ch], out[ch])
+			floats.Scale(1/(float64(nfft)*float64(nfft)/float64(gr.Hop)*norm), grain[ch])
+			floats.Mul(grain[ch], dual)
+		}
+		_, werr := gw.SignalWrite(nil, grain)
+		if werr != nil {
+			return werr
+		}
+		if countup == future {
+			return nil
+		}
+	}
+}

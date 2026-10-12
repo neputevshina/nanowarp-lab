@@ -55,7 +55,10 @@ func main() {
 	gr := dspio.NewGrainReader(nfft, hop, wavr)
 	fft := pffft.New(nfft)
 
-	// HPSS works best with a window with the smallest main lobe width.
+	// HPSS works best with windows with the smallest main lobe width,
+	// but a window's derivative must have compact support (zeros only before and after the window)
+	// to be perfectly invertible after modifications.
+	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
 	hann(win)
 
