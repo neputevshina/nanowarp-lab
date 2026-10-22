@@ -8,7 +8,7 @@ import (
 
 	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanowarp/dspio"
-	"gonum.org/v1/gonum/dsp/fourier"
+	"github.com/neputevshina/nanowarp/pffft"
 	"gonum.org/v1/gonum/floats"
 )
 
@@ -21,12 +21,12 @@ type warper struct {
 	olap  int     // nbuf/hop, Window ovelap
 	osamp float64 // nfft/nbuf, Zero-padding ratio
 
-	fft         *fourier.FFT
+	fft         *pffft.PFFFT
 	arm         [][]bool // PGHI done mask
 	norm, wgain float64  // Global normalization factor and grain-only normalization factor
 	heap        hp       // PGHI heap
 
-	points []geom.Point
+	points []geom.Rectangle
 	j      float64
 
 	a wbufs
@@ -62,8 +62,11 @@ func (w *warper) process(ain dspio.SignalReader) error {
 	{
 		cnv := make2(j, w.nbins)
 		for _, p := range w.points {
-			e := &cnv[int(math.Round(clamp(0, w.j-1, p.Y)))][int(math.Round(clamp(0, float64(w.nbins-1), p.X)))]
-			*e = min(*e+1, 8)
+			y := int(math.Round(clamp(0, w.j-1, p.Min.Y)))
+			x := int(math.Round(clamp(0, float64(w.nbins-1), p.Min.X)))
+			e := &cnv[y][x]
+			// *e++
+			*e += math.Log1p(p.Max.X)
 		}
 		for _, sl := range cnv {
 			slices.Reverse(sl)
@@ -83,17 +86,15 @@ func (n *warper) advance(presenta [][]float64) {
 	n.analyze(presenta, a.C, a.Px, a.Py, a.M, a.Mid, a.Cone)
 
 	for i := range n.nbins {
-		n.points = append(n.points, geom.Pt(float64(i)+a.Px[i], n.j))
+		n.points = append(n.points, geom.Rect(float64(i)+a.Px[i], n.j, a.M[i], 0))
 		// n.points = append(n.points, geom.Pt(a.Fadv[i], n.j))
-		n.points = append(n.points, geom.Pt(float64(i), n.j+a.Py[i]))
+		n.points = append(n.points, geom.Rect(float64(i), n.j+a.Py[i], a.M[i], 0))
 	}
 
 	// crop := func(e float64) float64 { return math.Copysign(bitsafe(math.Sqrt(abs(e))), e) }
 	ue := slices.Clone(a.Px)
 	uo := slices.Clone(a.Px)
 	for i := range a.Px {
-		a.Px[i] = clamp(-4, 4, a.Px[i])
-		a.Py[i] = clamp(-4, 4, a.Py[i])
 		ue[i], uo[i] = cmplx.Polar(complex(a.Px[i], a.Py[i]))
 	}
 	slices.Reverse((a.Px))
@@ -139,14 +140,15 @@ func (n *warper) analyze(present [][]float64, C [][]complex128, Px, Py, M, Mid, 
 
 	for w := range a.X {
 		// Default TFR:
-		// Px[w] = cif(a.X, a.Xd, w) * n.osamp
+		Px[w] = clamp(-4, 4, cif(a.X, a.Xd, w)) * n.osamp // Per window main lobe width (≈3.2)
+		Py[w] = -grainwrap(n.nbuf, lgd(a.X, a.Xt, w)) / float64(n.hop)
 		// Py[w] = -lgd(a.X, a.Xt, w) / float64(n.hop)
 
 		// Amplidude reassignment, see section 3 of
 		// “Hainsworth, Stephen, and Malcolm Macleod. Time frequency reassignment:
 		// A review and analysis. University of Cambridge, Department of Engineering, 2003.”
-		Px[w] = magvert(a.X, a.Xt, w) / float64(n.hop)
-		Py[w] = maghor(a.X, a.Xd, w) * n.osamp
+		// Px[w] = magvert(a.X, a.Xt, w) / float64(n.hop)
+		// Py[w] = maghor(a.X, a.Xd, w) * n.osamp
 	}
 
 	for w := range a.X {
@@ -186,7 +188,7 @@ func (n *warper) coneShapeKernel(out, Mid []float64) {
 
 func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
 	// FIXME Only 2x oversampling works, no more, no less.
-	nfft := nextpow2(nbuf * osamp)
+	nfft := nbuf * osamp
 	n = &warper{
 		nfft:  nfft,
 		nbins: nfft/2 + 1,
@@ -222,7 +224,7 @@ func warperNew(nbuf, osamp, olap, nch int) (n *warper) {
 	n.wgain = windowGain(n.a.W)
 	n.norm = float64(nfft) * float64(n.olap) * n.osamp * n.wgain
 
-	n.fft = fourier.NewFFT(nfft)
+	n.fft = pffft.New(nfft)
 	n.heap = make(hp, n.lah*n.nbins) // 2 for future and past.
 
 	return
@@ -280,4 +282,13 @@ func maghor(x, xd []complex128, j int) float64 {
 	}
 	e := real(xd[j]/x[j]) / math.Pi / 2
 	return e
+}
+
+func grainwrap(nfft int, x float64) float64 {
+	nf := float64(nfft)
+	r := math.Mod(x+nf/2, nf)
+	if r < 0 {
+		r += nf
+	}
+	return r - nf/2
 }

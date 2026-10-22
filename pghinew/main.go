@@ -36,7 +36,8 @@ func main() {
 		panic(err)
 	}
 
-	const nfft, hop = 3840, 640
+	const nbuf, hop = 3840, 640 / 2
+	const nfft = nbuf * 2
 	const nbins = nfft/2 + 1
 
 	wavr, err := wavio.NewDecoder(fa)
@@ -54,9 +55,9 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 6
+		trlen  = 12
 		height = 1
-		infl   = 5
+		infl   = 10
 	)
 
 	heap := make(hp, nbins)
@@ -82,13 +83,17 @@ func main() {
 	// 	arm[w] = v
 	// }
 	rl := bits.OnesCount(ridgemask)
-	common.StftHandle(gr, wavw, fft, kaiser(nfft, 3), trlen, 0, func(out [][]complex128, frames [][][]complex128, preanalyze bool) {
+	common.StftHandle(gr, wavw, fft, append(kaiser(nbuf, 3), make([]float64, nfft-nbuf)...), trlen, 0, func(out [][]complex128,
+		frames [][][]complex128, preanalyze bool) {
 		for ch := range out {
 			rotate(trace[ch])
 
 			heap = heap[:nbins]
 			cmplxs.Abs(mag, frames[len(frames)-1][ch])
+			// pfrm := frames[len(frames)-2][ch]
 			for w := range mag {
+				// df := (math.Pi + cmplx.Phase(pfrm[w]/pfrm[max(0, w-1)])) / float64(w) * nfft
+				// heap[w] = heaptriple{mag: pmags[ch][w] + df, w: w, t: -1}
 				heap[w] = heaptriple{mag: pmags[ch][w], w: w, t: -1}
 				ridges[ch][w] <<= rl
 			}
@@ -142,24 +147,19 @@ func main() {
 			copy(pmags[ch], mag)
 		}
 
+		// ue := make([]float64, nbins)
+		// for w := range ue {
+		// 	ue[w] = float64(bits.OnesCount(ridges[0][w] & (ridgemask << bits.OnesCount(ridgemask))))
+		// }
+		// oscope.Oscope(ue, oscope.Name("ridges"))
+
 		if !preanalyze {
 			for ch := range out {
 				fatten(traceaccum[ch], trace[ch][1], ridges[ch], infl)
 				for w := range mag {
 					c := traceaccum[ch][w]
 					tr := float64(trlen)
-					// if w < nbins/2 {
-					// 	tr -= 2
-					// }
-					// if w < nbins/4 {
-					// 	tr -= 2
-					// }
-					// if w < nbins/8 {
-					// 	tr -= 1
-					// }
-					// if w < nbins/16 {
-					// 	tr -= 1
-					// }
+					// TODO Octaves
 					what := c < tr
 					if *ftonal {
 						what = c >= tr

@@ -3,7 +3,7 @@ module github.com/neputevshina/nanowarp-lab/where-points-lead
 go 1.26.2
 
 require (
-	github.com/neputevshina/nanowarp v0.5.3
+	github.com/neputevshina/nanowarp v0.6.13
 	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
 	gonum.org/v1/gonum v0.17.0
 )

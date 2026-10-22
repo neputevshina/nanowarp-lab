@@ -6,6 +6,7 @@ import (
 	"unsafe"
 )
 
+//go:noinline
 func add(a, b []simd.Float32s) {
 	for i := range a {
 		a[i] = a[i].Add(b[i])
@@ -29,7 +30,7 @@ func main() {
 		vs1[i].Store(s1[i*vs:])
 	}
 	fmt.Println(s1, vs, simd.Emulated())
-	a := uintptr(unsafe.Pointer(unsafe.SliceData(vs1)))
-	b := uintptr(unsafe.Pointer(unsafe.SliceData(vs2)))
-	fmt.Println(a, b, a&0xf, b&0xf)
+	a := uintptr(unsafe.Pointer(unsafe.SliceData(s1)))
+	b := uintptr(unsafe.Pointer(unsafe.SliceData(s2)))
+	fmt.Println(a&0xf, b&0xf)
 }

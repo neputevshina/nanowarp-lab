@@ -18,8 +18,8 @@ var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 19, "horizontal radius")
 var fvrad = flag.Int("v", 19, "vertical radius")
 var ftonal = flag.Bool("t", false, "output tonals")
-var fhperc = flag.Int("ph", 0, "horizontal percentile")
-var fvperc = flag.Int("pv", 0, "vertical percentile")
+var fhperc = flag.Int("ph", 50, "horizontal percentile")
+var fvperc = flag.Int("pv", 50, "vertical percentile")
 
 func main() {
 	flag.Parse()
