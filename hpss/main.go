@@ -17,6 +17,8 @@ import (
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 19, "horizontal radius")
 var fvrad = flag.Int("v", 19, "vertical radius")
+
+var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
@@ -75,39 +77,60 @@ func main() {
 	if zerov {
 		vert = mediatorNew[float64, struct{}](*fvrad, *fvrad, 1)
 	}
+	smolv := mediatorNew[float64, struct{}](*fvib, *fvib, 1)
+	magt := make([]float64, nbins)
 	first := true
 	now := *fhrad
+	vib := func(out []float64, in [][]complex128) {
+		if *fvib != 0 {
+			for range *fvib {
+				smolv.Insert(0, struct{}{})
+			}
+		}
+		for w := range nbins {
+			mid := .0
+			for ch := range in {
+				mid += cmplx.Abs(in[ch][w])
+			}
+			if *fvib != 0 {
+				out[w], _ = smolv.Filt(mid, struct{}{})
+			} else {
+				out[w] = mid
+			}
+		}
+	}
 	common.StftHandle(gr, wavw, fft, win, now, now, func(out [][]complex128, frames [][][]complex128, preanalyze bool) {
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
-				mid := .0
+				vib(magt, frames[f])
 				for w := range nbins {
-					for ch := range out {
-						mid += cmplx.Abs(frames[f][ch][w])
-					}
-					bank[w].Insert(mid, struct{}{}) // Insert two times imitating the mirroring.
-					bank[w].Insert(mid, struct{}{}) // Order probably won't matter.
+					bank[w].Insert(magt[w], struct{}{}) // Insert two times imitating the mirroring.
+					bank[w].Insert(magt[w], struct{}{}) // Order probably won't matter.
 				}
 			}
 			first = false
 		}
+		vib(magt, frames[len(frames)-1])
 		for w := range nbins {
-			mid := .0
-			for ch := range out {
-				mid += cmplx.Abs(frames[len(frames)-1][ch][w])
-			}
+			mid := magt[w]
 			if zeroh {
 				mid = -mid
 			}
 			bank[w].Insert(mid, struct{}{})
 		}
 		if !preanalyze {
-			for w := range nbins {
-				mid := .0
-				for ch := range out {
-					mid += cmplx.Abs(frames[now][ch][w])
+			vib(magt, frames[now])
+			vert.Reset(*fvrad)
+			for w := range *fvrad { // Mirror the beginning
+				mid := magt[w]
+				if zerov {
+					mid = -mid
 				}
+				vert.Insert(mid, struct{}{})
+			}
+			for w := range nbins {
+				mid := magt[w]
 				if zerov {
 					mid = -mid
 				}

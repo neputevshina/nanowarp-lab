@@ -96,6 +96,9 @@ func (n *warper) advance(presenta [][]float64) {
 	uo := slices.Clone(a.Px)
 	for i := range a.Px {
 		ue[i], uo[i] = cmplx.Polar(complex(a.Px[i], a.Py[i]))
+		// if ue[i] > 0 {
+		// 	ue[i] = abs(a.Px[i] / ue[i])
+		// }
 	}
 	slices.Reverse((a.Px))
 	slices.Reverse((a.Py))
