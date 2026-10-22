@@ -15,8 +15,8 @@ import (
 )
 
 var finputa = flag.String("a", "", "source WAV")
-var fhrad = flag.Int("h", 19, "horizontal radius")
-var fvrad = flag.Int("v", 19, "vertical radius")
+var fhrad = flag.Int("h", 6, "horizontal radius")
+var fvrad = flag.Int("v", 6, "vertical radius")
 
 var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
