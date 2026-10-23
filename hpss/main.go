@@ -112,13 +112,6 @@ func main() {
 			first = false
 		}
 		vib(magt, frames[len(frames)-1])
-		for w := range nbins {
-			mid := magt[w]
-			if zeroh {
-				mid = -mid
-			}
-			bank[w].Insert(mid, struct{}{})
-		}
 		if !preanalyze {
 			vib(magt, frames[now])
 			vert.Reset(*fvrad)
@@ -150,6 +143,13 @@ func main() {
 					out[ch][w] = frames[now][ch][w] * complex(m, 0)
 				}
 			}
+		}
+		for w := range nbins {
+			mid := magt[w]
+			if zeroh {
+				mid = -mid
+			}
+			bank[w].Insert(mid, struct{}{})
 		}
 
 	})
