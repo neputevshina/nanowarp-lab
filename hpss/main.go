@@ -16,7 +16,7 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 6, "horizontal radius")
-var fvrad = flag.Int("v", 6, "vertical radius")
+var fvrad = flag.Int("v", 24, "vertical radius")
 
 var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
@@ -144,6 +144,7 @@ func main() {
 				}
 			}
 		}
+		// Vibrato filtering (doesn't work).
 		for w := range nbins {
 			mid := magt[w]
 			if zeroh {
@@ -151,6 +152,9 @@ func main() {
 			}
 			bank[w].Insert(mid, struct{}{})
 		}
+		// // Include the point if its LGD maps to the percussive frame.
+		// // Use finite phase reassignment as a bodge.
+		// c := float64(wavr.Properties().Samplerate*nfft) / (4 * math.Pi)
 
 	})
 	oscope.Dump(nil, ".")
