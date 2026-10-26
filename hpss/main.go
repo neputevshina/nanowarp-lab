@@ -100,7 +100,7 @@ func main() {
 		}
 	}
 	roto := make2[bool](now*2+1, nbins)
-	// newroto := make([]int, nbins)
+	newroto := make([]int, nbins)
 	common.StftHandle(gr, wavw, fft, [][]float64{win, windowDx(win), windowT(win)}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
 		// Accumulate lookahead.
@@ -145,6 +145,7 @@ func main() {
 				// _ = disp
 				// m := boolfloat(v > h)
 				roto[now][w] = v > h
+				newroto[w] = int(boolfloat(roto[now][w]))
 			}
 			// // Backpropagate the mask vertically by vertical bin shift (CIF).
 			// clear(newroto)
@@ -156,10 +157,14 @@ func main() {
 			// 	} else {
 			// 		newroto[y] -= 1
 			// 	}
+			// 	// if !roto[now][w] {
+			// 	// 	newroto[y] = 0
+			// 	// } else {
+			// 	// 	newroto[y] = 1
+			// 	// }
 			// }
 			for w := range nbins {
-				// m := boolfloat(newroto[w] > 0)
-				m := boolfloat(roto[now][w])
+				m := boolfloat(newroto[w] > 0)
 				if *ftonal {
 					m = 1 - m
 				}
