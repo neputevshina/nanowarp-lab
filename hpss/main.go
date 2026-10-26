@@ -99,7 +99,10 @@ func main() {
 			}
 		}
 	}
-	common.StftHandle(gr, wavw, fft, win, now, now, func(out [][]complex128, frames [][][]complex128, preanalyze bool) {
+	roto := make2[bool](now*2+1, nbins)
+	// newroto := make([]int, nbins)
+	common.StftHandle(gr, wavw, fft, [][]float64{win, windowDx(win), windowT(win)}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
+		frames := windowed[0]
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
@@ -122,6 +125,7 @@ func main() {
 				}
 				vert.Insert(mid, struct{}{})
 			}
+			ue := make([]float64, nbins)
 			for w := range nbins {
 				mid := magt[w]
 				if zerov {
@@ -135,14 +139,39 @@ func main() {
 				if zeroh {
 					h = -h
 				}
-				m := boolfloat(v > h)
+				// lgd := grainwrap(nfft, real(windowed[2][now][0][w]/frames[now][0][w]))
+				// disp := int(math.Round(lgd / float64(hop)))
+				// m := boolfloat(v > h || roto[min(now+disp, now)][w])
+				// _ = disp
+				// m := boolfloat(v > h)
+				roto[now][w] = v > h
+			}
+			// // Backpropagate the mask vertically by vertical bin shift (CIF).
+			// clear(newroto)
+			// for w := range nbins {
+			// 	cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
+			// 	y := max(0, min(int(math.Round(float64(w)-cif)), nbins-1))
+			// 	if roto[now][w] {
+			// 		newroto[y] += 1
+			// 	} else {
+			// 		newroto[y] -= 1
+			// 	}
+			// }
+			for w := range nbins {
+				// m := boolfloat(newroto[w] > 0)
+				m := boolfloat(roto[now][w])
 				if *ftonal {
 					m = 1 - m
 				}
 				for ch := range out {
 					out[ch][w] = frames[now][ch][w] * complex(m, 0)
 				}
+				ue[w] = m * math.Log1p(magt[w])
 			}
+
+			oscope.Oscope(ue, oscope.Name(`asdf`))
+			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
+			copy(roto, roto[1:])
 		}
 		// Vibrato filtering (doesn't work).
 		for w := range nbins {
@@ -155,6 +184,7 @@ func main() {
 		// // Include the point if its LGD maps to the percussive frame.
 		// // Use finite phase reassignment as a bodge.
 		// c := float64(wavr.Properties().Samplerate*nfft) / (4 * math.Pi)
+		// (We actually need to save the mask for this)
 
 	})
 	oscope.Dump(nil, ".")
@@ -224,4 +254,45 @@ func hann(out []float64) {
 		x := float64(i) / float64(len(out))
 		out[i] = 0.5 * (1 - math.Cos(2*math.Pi*x))
 	}
+}
+
+// windowT calculates the time ramp multiplied window
+// function for time-frequency reassignment.
+func windowT(w []float64) (out []float64) {
+	out = make([]float64, len(w))
+	n := float64(len(w))
+	for i := range w {
+		out[i] = w[i] * mix(-n/2, n/2+1, float64(i)/n)
+	}
+	return
+}
+
+// windowDx calculates the derivative of w using DFT.
+func windowDx(w []float64) (out []float64) {
+	out = make([]float64, len(w))
+	f := pffft.New(len(w))
+	s := f.Coefficients(nil, w)
+	for i := range s {
+		s[i] *= complex(0, float64(i))
+		s[i] /= complex(float64(len(w)), 0)
+	}
+	s[len(w)/2] = 0
+	f.Sequence(out, s)
+	for i := range out {
+		out[i] = -out[i] * math.Pi * 2
+	}
+	return
+}
+
+func grainwrap(nfft int, x float64) float64 {
+	nf := float64(nfft)
+	r := math.Mod(x+nf/2, nf)
+	if r < 0 {
+		r += nf
+	}
+	r -= nf / 2
+	if r != r || math.IsInf(r, 0) {
+		return 0
+	}
+	return r
 }

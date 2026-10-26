@@ -16,26 +16,29 @@ import (
 // The transform can be oversampled/downsampled if rd.N() ≠ fft.Len().
 // Synthesis windowing is applied with automatically generated dual of the given window function.
 // The size of frames in consumer is future+past+1, where the current frame (with the same number as ‘out’)
-// is given by frames[past].
+// is given by frames[...][past].
 //
 // It does not try to write to wr if it is nil. Changing gr.Hop while this routine is working will
 // produce broken synthesis result.
 func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
-	fft pffft.Fourier, window []float64, future int, past int,
-	consumer func(out [][]complex128, frames [][][]complex128, preanalyze bool)) error {
+	fft pffft.Fourier, windows [][]float64, future int, past int,
+	consumer func(out [][]complex128, frames [][][][]complex128, preanalyze bool)) error {
 	nch := gr.NchRead()
 	if nch != wr.NchWrite() {
 		panic(`StftHandle: different number of channels between reader and writer`)
 	}
 
-	dual, norm := windowDualUniform(window, gr.Hop)
+	dual, norm := windowDualUniform(windows[0], gr.Hop)
 	gw := dspio.NewGrainWriter(gr.N(), gr.Hop, wr)
 	grain := make2[float64](gr.NchRead(), gr.N())
 	makebins := func() [][]complex128 { return make2[complex128](gr.NchRead(), fft.Len()/2+1) }
 	out := makebins()
-	frames := make([][][]complex128, future+past+1)
-	for n := range frames {
-		frames[n] = makebins()
+	frames := make([][][][]complex128, len(windows))
+	for w := range frames {
+		frames[w] = make([][][]complex128, future+past+1)
+		for n := range frames[w] {
+			frames[w][n] = makebins()
+		}
 	}
 	last := future + past
 	countdown := future
@@ -53,11 +56,13 @@ func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
 				return rerr
 			}
 		}
-		frames[last], frames[0] = frames[0], frames[last]
-		copy(frames, frames[1:])
-		for ch := range nch {
-			floats.Mul(grain[ch], window)
-			fft.Coefficients(frames[last][ch], grain[ch])
+		for wn, fr := range frames {
+			fr[last], fr[0] = fr[0], fr[last]
+			copy(fr, fr[1:])
+			for ch := range nch {
+				floats.Mul(grain[ch], windows[wn])
+				fft.Coefficients(frames[wn][last][ch], grain[ch])
+			}
 		}
 		consumer(out, frames, countdown > 0)
 		if countdown > 0 { // Accumulate lookahead.
