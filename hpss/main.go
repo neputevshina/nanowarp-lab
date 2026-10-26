@@ -23,6 +23,8 @@ var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
 
+var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
+
 func main() {
 	flag.Parse()
 	oscope.Enable = true
@@ -147,22 +149,19 @@ func main() {
 				roto[now][w] = v > h
 				newroto[w] = int(boolfloat(roto[now][w]))
 			}
-			// // Backpropagate the mask vertically by vertical bin shift (CIF).
-			// clear(newroto)
-			// for w := range nbins {
-			// 	cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
-			// 	y := max(0, min(int(math.Round(float64(w)-cif)), nbins-1))
-			// 	if roto[now][w] {
-			// 		newroto[y] += 1
-			// 	} else {
-			// 		newroto[y] -= 1
-			// 	}
-			// 	// if !roto[now][w] {
-			// 	// 	newroto[y] = 0
-			// 	// } else {
-			// 	// 	newroto[y] = 1
-			// 	// }
-			// }
+			if *fcif {
+				// Backpropagate the mask vertically by vertical bin shift (CIF).
+				clear(newroto)
+				for w := range nbins {
+					cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
+					y := max(0, min(int(math.Round(float64(w)-cif)), nbins-1))
+					if roto[now][w] {
+						newroto[y] += 1
+					} else {
+						newroto[y] -= 1
+					}
+				}
+			}
 			for w := range nbins {
 				m := boolfloat(newroto[w] > 0)
 				if *ftonal {
