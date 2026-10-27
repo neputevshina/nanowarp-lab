@@ -154,11 +154,15 @@ func main() {
 				clear(newroto)
 				for w := range nbins {
 					cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
-					y := max(0, min(int(math.Round(float64(w)-cif)), nbins-1))
-					if roto[now][w] {
-						newroto[y] += 1
+					y := max(0, min(int(math.Round(float64(w)+cif)), nbins-1))
+					// if y >= -1 || y <= 1 {
+					// 	// newroto[y] = int(boolfloat(roto[now][w]))
+					// 	continue
+					// }
+					if roto[now][y] {
+						newroto[w]++
 					} else {
-						newroto[y] -= 1
+						newroto[w]--
 					}
 				}
 			}
@@ -171,6 +175,7 @@ func main() {
 					out[ch][w] = frames[now][ch][w] * complex(m, 0)
 				}
 				ue[w] = m * math.Log1p(magt[w])
+				// ue[w] = float64(newroto[w])
 			}
 
 			oscope.Oscope(ue, oscope.Name(`asdf`))
