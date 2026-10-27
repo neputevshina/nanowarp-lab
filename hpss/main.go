@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/cmplx"
 	"os"
+	"slices"
 
 	"github.com/neputevshina/nanowarp-lab/common"
 	"github.com/neputevshina/nanowarp/dspio"
@@ -24,6 +25,7 @@ var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
 
 var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
+var fseam = flag.Bool("seam", false, "output seam carved clips")
 
 func main() {
 	flag.Parse()
@@ -103,6 +105,14 @@ func main() {
 	}
 	roto := make2[bool](now*2+1, nbins)
 	newroto := make([]int, nbins)
+	var field, energy, soutput [][]float64
+	var chains [][]int
+	if *fseam {
+		field = make([][]float64, 0)
+		energy = make([][]float64, 0)
+		soutput = make([][]float64, nbins)
+		chains = make([][]int, 0)
+	}
 	common.StftHandle(gr, wavw, fft, [][]float64{win, windowDx(win), windowT(win)}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
 		// Accumulate lookahead.
@@ -155,10 +165,6 @@ func main() {
 				for w := range nbins {
 					cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
 					y := max(0, min(int(math.Round(float64(w)+cif)), nbins-1))
-					// if y >= -1 || y <= 1 {
-					// 	// newroto[y] = int(boolfloat(roto[now][w]))
-					// 	continue
-					// }
 					if roto[now][y] {
 						newroto[w]++
 					} else {
@@ -177,6 +183,10 @@ func main() {
 				ue[w] = m * math.Log1p(magt[w])
 				// ue[w] = float64(newroto[w])
 			}
+			if *fseam {
+				field = append(field, slices.Clone(ue))
+				energy = append(energy, slices.Clone(ue))
+			}
 
 			oscope.Oscope(ue, oscope.Name(`asdf`))
 			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
@@ -194,8 +204,73 @@ func main() {
 		// // Use finite phase reassignment as a bodge.
 		// c := float64(wavr.Properties().Samplerate*nfft) / (4 * math.Pi)
 		// (We actually need to save the mask for this)
-
 	})
+
+	if *fseam {
+		for w := range field[0] {
+			if w == 0 {
+				continue
+			}
+			for t := range field {
+				if t == 0 || t == len(field)-1 {
+					continue
+				}
+				energy[t][w] += min(energy[t-1][w-1], energy[t][w-1], energy[t+1][w-1])
+			}
+		}
+
+		const wdth = 12
+		for t := range energy[wdth:] {
+			mn, mni := energy[t][0], 0
+			ecrop := energy[t : t+wdth]
+			for ct := range ecrop {
+				if ecrop[ct][0] < mn {
+					mn = ecrop[ct][0]
+					mni = ct
+				}
+			}
+			lc := make([]int, 0)
+			for w := range nbins {
+				lc = append(lc, t+mni)
+				for i := -wdth / 2; i <= wdth/2; i++ {
+					nmni := max(0, min(mni+i, wdth-1))
+					cu := ecrop[nmni][w]
+					if cu < mn {
+						mn = cu
+						mni = nmni
+					}
+				}
+			}
+			chains = append(chains, lc)
+		}
+
+		repeats := make([][]int, nbins)
+		for _, ch := range chains {
+			for w := range nbins {
+				repeats[w] = append(repeats[w], ch[w])
+			}
+		}
+		for w := range nbins {
+			slices.Reverse(repeats[w])
+		}
+		for w := range nbins {
+			for t := range field {
+				soutput[w] = append(soutput[w], field[t][w])
+				for len(repeats[w]) > 0 && repeats[w][len(repeats[w])-1] <= t {
+					soutput[w] = append(soutput[w], 0)
+					repeats[w] = repeats[w][:len(repeats[w])-1]
+				}
+			}
+		}
+
+		for _, f := range soutput {
+			oscope.Oscope(f, oscope.Name(`soutput`))
+		}
+		for _, f := range energy {
+			oscope.Oscope(f, oscope.Name(`energy`))
+		}
+	}
+
 	oscope.Dump(nil, ".")
 }
 
