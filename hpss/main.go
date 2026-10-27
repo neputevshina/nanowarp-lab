@@ -105,11 +105,13 @@ func main() {
 	}
 	roto := make2[bool](now*2+1, nbins)
 	newroto := make([]int, nbins)
-	var field, energy, soutput [][]float64
+	var field, energy, energy2, ueoai, soutput [][]float64
 	var chains [][]int
 	if *fseam {
 		field = make([][]float64, 0)
 		energy = make([][]float64, 0)
+		energy2 = make([][]float64, 0)
+		ueoai = make([][]float64, 0)
 		soutput = make([][]float64, nbins)
 		chains = make([][]int, 0)
 	}
@@ -170,6 +172,11 @@ func main() {
 					} else {
 						newroto[w]--
 					}
+					if roto[now][w] {
+						newroto[y]++
+					} else {
+						newroto[y]--
+					}
 				}
 			}
 			for w := range nbins {
@@ -180,15 +187,26 @@ func main() {
 				for ch := range out {
 					out[ch][w] = frames[now][ch][w] * complex(m, 0)
 				}
-				ue[w] = m * math.Log1p(magt[w])
+				// cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
+				// lgd := -grainwrap(nfft, -real(windowed[2][now][0][w]/frames[now][0][w])) / float64(hop)
+				// // ue[w] = m * math.Log1p(magt[w])
+				// gn := min(math.Hypot(lgd, cif), 4)
+				// if gn != gn || math.IsInf(gn, 0) {
+				// 	gn = 0
+				// }
+				// ue[w] = gn
 				// ue[w] = float64(newroto[w])
 			}
 			if *fseam {
 				field = append(field, slices.Clone(ue))
 				energy = append(energy, slices.Clone(ue))
+				energy2 = append(energy2, slices.Clone(ue))
+				asd := slices.Clone(ue)
+				clear(asd)
+				ueoai = append(ueoai, asd)
 			}
 
-			oscope.Oscope(ue, oscope.Name(`asdf`))
+			// oscope.Oscope(ue, oscope.Name(`asdf`))
 			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
 			copy(roto, roto[1:])
 		}
@@ -207,35 +225,46 @@ func main() {
 	})
 
 	if *fseam {
-		for w := range field[0] {
-			if w == 0 {
-				continue
-			}
-			for t := range field {
-				if t == 0 || t == len(field)-1 {
-					continue
-				}
-				energy[t][w] += min(energy[t-1][w-1], energy[t][w-1], energy[t+1][w-1])
-			}
-		}
+		// for w := range field[0] {
+		// 	if w == 0 {
+		// 		continue
+		// 	}
+		// 	for t := range field {
+		// 		if t == 0 || t == len(field)-1 {
+		// 			continue
+		// 		}
+		// 		energy[t][w] += min(energy[t-1][w-1], energy[t][w-1], energy[t+1][w-1])
+		// 	}
+		// }
+		// for w := nbins - 1; w >= 0; w-- {
+		// 	if w == nbins-1 {
+		// 		continue
+		// 	}
+		// 	for t := range field {
+		// 		if t == 0 || t == len(field)-1 {
+		// 			continue
+		// 		}
+		// 		energy2[t][w] += min(energy2[t-1][w+1], energy2[t][w+1], energy2[t+1][w+1])
+		// 		energy[t][w] += energy2[t][w]
+		// 	}
+		// }
 
 		const wdth = 12
 		for t := range energy[wdth:] {
 			mn, mni := energy[t][0], 0
 			ecrop := energy[t : t+wdth]
-			for ct := range ecrop {
-				if ecrop[ct][0] < mn {
-					mn = ecrop[ct][0]
-					mni = ct
-				}
-			}
 			lc := make([]int, 0)
 			for w := range nbins {
-				lc = append(lc, t+mni)
-				for i := -wdth / 2; i <= wdth/2; i++ {
-					nmni := max(0, min(mni+i, wdth-1))
-					cu := ecrop[nmni][w]
-					if cu < mn {
+				if t+mni < 0 {
+					lc = append(lc, 0)
+				} else {
+					lc = append(lc, t+mni)
+				}
+				w2 := 1
+				mn = math.MaxFloat64
+				for nmni := -w2; nmni <= w2; nmni++ {
+					cu := ecrop[max(0, min(nmni, wdth-1))][w]
+					if cu <= mn {
 						mn = cu
 						mni = nmni
 					}
@@ -250,24 +279,48 @@ func main() {
 				repeats[w] = append(repeats[w], ch[w])
 			}
 		}
+		for w := range repeats {
+			// fmt.Println(repeats[w])
+			for t := range repeats[w] {
+				ueoai[repeats[w][t]][w]++
+			}
+
+		}
 		for w := range nbins {
 			slices.Reverse(repeats[w])
+			oscope.Oscope(slices.Clone(repeats[w]), oscope.Name(`repeats`))
 		}
+		// sinput := make([][]float64, nbins)
+		shift := make([]int, nbins)
 		for w := range nbins {
 			for t := range field {
 				soutput[w] = append(soutput[w], field[t][w])
-				for len(repeats[w]) > 0 && repeats[w][len(repeats[w])-1] <= t {
+				for len(repeats[w]) > 0 && repeats[w][len(repeats[w])-1] <= t+shift[w] {
+					shift[w]++
 					soutput[w] = append(soutput[w], 0)
+					// ueoai[t][w]++
 					repeats[w] = repeats[w][:len(repeats[w])-1]
 				}
 			}
 		}
 
 		for _, f := range soutput {
+			d := len(f) - 3000
+			if d <= 0 {
+				// b := len(f)
+				f = append(f, make([]float64, -d)...)
+				// println(b, len(f))
+			}
 			oscope.Oscope(f, oscope.Name(`soutput`))
 		}
+		// for _, f := range soutput {
+		// 	m0 = min(m0, len(f))
+		// }
 		for _, f := range energy {
 			oscope.Oscope(f, oscope.Name(`energy`))
+		}
+		for _, f := range ueoai {
+			oscope.Oscope(f, oscope.Name(`ueoai`))
 		}
 	}
 
@@ -379,4 +432,7 @@ func grainwrap(nfft int, x float64) float64 {
 		return 0
 	}
 	return r
+}
+func clamp[T constraints.Ordered](a, b, x T) T {
+	return max(a, min(b, x))
 }
