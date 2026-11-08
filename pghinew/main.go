@@ -83,8 +83,9 @@ func main() {
 	// 	arm[w] = v
 	// }
 	rl := bits.OnesCount(ridgemask)
-	common.StftHandle(gr, wavw, fft, append(kaiser(nbuf, 3), make([]float64, nfft-nbuf)...), trlen, 0, func(out [][]complex128,
-		frames [][][]complex128, preanalyze bool) {
+	common.StftHandle(gr, wavw, fft, [][]float64{append(kaiser(nbuf, 3), make([]float64, nfft-nbuf)...)}, trlen, 0, func(out [][]complex128,
+		buf [][][][]complex128, preanalyze bool) {
+		frames := buf[0]
 		for ch := range out {
 			rotate(trace[ch])
 

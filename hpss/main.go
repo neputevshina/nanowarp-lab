@@ -16,8 +16,8 @@ import (
 )
 
 var finputa = flag.String("a", "", "source WAV")
-var fhrad = flag.Int("h", 6, "horizontal radius")
-var fvrad = flag.Int("v", 24, "vertical radius")
+var fhrad = flag.Int("h", 5, "horizontal radius")
+var fvrad = flag.Int("v", 23, "vertical radius")
 
 var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
@@ -194,7 +194,7 @@ func main() {
 				// if gn != gn || math.IsInf(gn, 0) {
 				// 	gn = 0
 				// }
-				// ue[w] = gn
+				// ue[w] = m * math.Log1p(magt[w])
 				// ue[w] = float64(newroto[w])
 			}
 			if *fseam {
