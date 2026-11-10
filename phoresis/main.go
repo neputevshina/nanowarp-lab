@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/cmplx"
 	"os"
+	"path"
 	"slices"
 
 	"github.com/neputevshina/nanowarp-lab/common"
@@ -18,11 +19,17 @@ import (
 var finputa = flag.String("a", "", "source WAV")
 var folap = flag.Int("l", 6, "overlap")
 var fnfft = flag.Int("nfft", 4096, "fft grain size")
-var fnf = flag.Float64("nf", -90, "noise floor in `db`")
+var fnf = flag.Float64("nf", -70, "noise floor in `db`")
+var ftrim = flag.Float64("trim", 0, "trim in `db`")
 
 func main() {
 	flag.Parse()
 	oscope.Enable = true
+
+	if *finputa == `` {
+		flag.PrintDefaults()
+		return
+	}
 
 	fa, err := os.Open(*finputa)
 	if err != nil {
@@ -31,15 +38,13 @@ func main() {
 
 	nfft := *fnfft
 	hop := nfft / *folap
-	nbins := nfft/2 + 1
+	// nbins := nfft/2 + 1
 
 	wavr, err := wavio.NewDecoder(fa)
 	if err != nil {
 		panic(err)
 	}
 	p := wavr.Properties()
-	_ = nbins
-	_ = p
 
 	gr := dspio.NewGrainReader(nfft, hop, wavr)
 	fft := pffft.New(nfft)
@@ -61,8 +66,8 @@ func main() {
 				lgd := bitsafe(grainwrap(nfft, real(windowed[2][0][ch][w]/windowed[0][0][ch][w])))
 				_, x := math.Modf(math.Log2(float64(w)+cif) - c1)
 				x = clamp(0, 1, bitsafe(x))
-				y := atodb(abs) - *fnf
-				y = clamp(0, 1, unmix(0, float64(len(tex[0])-1), y))
+				y := clamp(0, 1, unmix(*fnf, *ftrim, atodb(abs)-60))
+				// y = clamp(0, 1, unmix(0, float64(len(tex[0])-1), y))
 				px := int(mix(0, float64(len(tex)-1), x))
 				py := int(mix(float64(len(tex[0])-1), 0, y))
 				tex[px][py] += math.Abs(lgd / math.Hypot(cif, lgd))
@@ -70,7 +75,7 @@ func main() {
 		}
 	})
 	for _, l := range tex {
-		oscope.Oscope(slices.Clone(l), oscope.Name(`phoresis`))
+		oscope.Oscope(slices.Clone(l), oscope.Name(path.Base(*finputa)))
 	}
 
 	oscope.Dump(nil, ".")
