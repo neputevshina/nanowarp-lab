@@ -16,8 +16,10 @@ import (
 )
 
 var finputa = flag.String("a", "", "source WAV")
-var fhrad = flag.Int("h", 6, "horizontal radius")
+var fhrad = flag.Int("h", 0, "horizontal radius, if less than or 0 equal to -l")
 var fvrad = flag.Int("v", 24, "vertical radius")
+var folap = flag.Int("l", 6, "overlap")
+var fnfft = flag.Int("nfft", 3840, "fft grain size")
 
 var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
@@ -44,8 +46,9 @@ func main() {
 		panic(err)
 	}
 
-	const nfft, hop = 3840, 640
-	const nbins = nfft/2 + 1
+	nfft := *fnfft
+	hop := nfft / *folap
+	nbins := nfft/2 + 1
 
 	wavr, err := wavio.NewDecoder(fa)
 	if err != nil {
@@ -67,6 +70,10 @@ func main() {
 	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
 	hann(win)
+
+	if *fhrad == 0 {
+		*fhrad = *folap
+	}
 
 	zeroh, zerov := *fhrad**fhperc/100 == 0, *fvrad**fvperc/100 == 0
 	bank := make([]*mediator[float64, struct{}], nbins)
