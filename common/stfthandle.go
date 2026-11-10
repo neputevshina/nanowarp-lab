@@ -15,6 +15,10 @@ import (
 // applies windowing, gain normalization, performs FFT on the signal and gives it for consumer to process it.
 // The transform can be oversampled/downsampled if rd.N() ≠ fft.Len().
 // Synthesis windowing is applied with automatically generated dual of the given window function.
+// frames is mapped as
+//
+//	[window number][shift][channel][bin]float64
+//
 // The size of frames in consumer is future+past+1, where the current frame (with the same number as ‘out’)
 // is given by frames[...][past].
 //
@@ -24,12 +28,15 @@ func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
 	fft pffft.Fourier, windows [][]float64, future int, past int,
 	consumer func(out [][]complex128, frames [][][][]complex128, preanalyze bool)) error {
 	nch := gr.NchRead()
-	if nch != wr.NchWrite() {
+	if wr != nil && nch != wr.NchWrite() {
 		panic(`StftHandle: different number of channels between reader and writer`)
 	}
 
 	dual, norm := windowDualUniform(windows[0], gr.Hop)
-	gw := dspio.NewGrainWriter(gr.N(), gr.Hop, wr)
+	var gw *dspio.GrainWriter
+	if wr != nil {
+		gw = dspio.NewGrainWriter(gr.N(), gr.Hop, wr)
+	}
 	grain := make2[float64](gr.NchRead(), gr.N())
 	makebins := func() [][]complex128 { return make2[complex128](gr.NchRead(), fft.Len()/2+1) }
 	out := makebins()
@@ -74,9 +81,11 @@ func StftHandle(gr *dspio.GrainReader, wr dspio.SignalWriter,
 			floats.Scale(1/(float64(nfft)*float64(nfft)/float64(gr.Hop)*norm), grain[ch])
 			floats.Mul(grain[ch], dual)
 		}
-		_, werr := gw.SignalWrite(nil, grain)
-		if werr != nil {
-			return werr
+		if gw != nil {
+			_, werr := gw.SignalWrite(nil, grain)
+			if werr != nil {
+				return werr
+			}
 		}
 		if countup == future {
 			return nil

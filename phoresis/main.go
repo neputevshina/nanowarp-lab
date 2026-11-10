@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"math"
+	"math/cmplx"
 	"os"
+	"slices"
 
 	"github.com/neputevshina/nanowarp-lab/common"
 	"github.com/neputevshina/nanowarp/dspio"
@@ -15,7 +17,8 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var folap = flag.Int("l", 6, "overlap")
-var fnfft = flag.Int("nfft", 3840, "fft grain size")
+var fnfft = flag.Int("nfft", 4096, "fft grain size")
+var fnf = flag.Float64("nf", -90, "noise floor in `db`")
 
 func main() {
 	flag.Parse()
@@ -41,20 +44,34 @@ func main() {
 	gr := dspio.NewGrainReader(nfft, hop, wavr)
 	fft := pffft.New(nfft)
 
-	// HPSS works best with windows with the smallest main lobe width,
-	// but a window's derivative must have compact support (zeros only before and after the window)
-	// to be perfectly invertible after modifications.
-	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
 	hann(win)
 
-	// var field, energy, energy2, ueoai, soutput [][]float64
-	// var chains [][]int
+	tex := make2[float64](600, 200)
+	cut := int(hztobin(2500, nfft, float64(p.Samplerate)))
+	_, c1 := math.Modf(math.Log2(hztobin(32.703, nfft, float64(p.Samplerate))))
 	common.StftHandle(gr, nil, fft, [][]float64{win, windowDx(win), windowT(win)}, 0, 0, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
-		// frames := windowed[0]
-		// Accumulate lookahead.
-		return
+		for ch := range p.Nch {
+			for w := range cut {
+				abs := cmplx.Abs(windowed[0][0][ch][w])
+				if abs == 0 {
+					continue
+				}
+				cif := imag(windowed[1][0][ch][w]/windowed[0][0][ch][w]) / math.Pi
+				lgd := bitsafe(grainwrap(nfft, real(windowed[2][0][ch][w]/windowed[0][0][ch][w])))
+				_, x := math.Modf(math.Log2(float64(w)+cif) - c1)
+				x = clamp(0, 1, bitsafe(x))
+				y := atodb(abs) - *fnf
+				y = clamp(0, 1, unmix(0, float64(len(tex[0])-1), y))
+				px := int(mix(0, float64(len(tex)-1), x))
+				py := int(mix(float64(len(tex[0])-1), 0, y))
+				tex[px][py] += math.Abs(lgd / math.Hypot(cif, lgd))
+			}
+		}
 	})
+	for _, l := range tex {
+		oscope.Oscope(slices.Clone(l), oscope.Name(`phoresis`))
+	}
 
 	oscope.Dump(nil, ".")
 }
@@ -165,6 +182,30 @@ func grainwrap(nfft int, x float64) float64 {
 	}
 	return r
 }
+
 func clamp[T constraints.Ordered](a, b, x T) T {
 	return max(a, min(b, x))
+}
+
+// dbtoa converts a value in decibels full scale (dBFS) to amplitude.
+func dbtoa(db float64) float64 {
+	return math.Pow(10, db/20)
+}
+
+// atodb converts an amplidude value to decibels full scale (dBFS).
+func atodb(a float64) float64 {
+	return 20 * math.Log10(a)
+}
+
+func bitsafe(v float64) float64 {
+	if v != v || math.IsInf(v, 0) {
+		return 0
+	}
+	return v
+}
+
+// hztobin converts a frequency value in hertz to bin number of a DFT
+// of size nfft on a signal with known sample rate.
+func hztobin(hz float64, nfft int, samplerate float64) float64 {
+	return hz * float64(nfft) / samplerate
 }
