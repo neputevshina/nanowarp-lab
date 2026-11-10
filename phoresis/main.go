@@ -19,7 +19,7 @@ import (
 var finputa = flag.String("a", "", "source WAV")
 var folap = flag.Int("l", 6, "overlap")
 var fnfft = flag.Int("nfft", 4096, "fft grain size")
-var fnf = flag.Float64("nf", -70, "noise floor in `db`")
+var fnf = flag.Float64("nf", -90, "noise floor in `db`")
 var ftrim = flag.Float64("trim", 0, "trim in `db`")
 
 func main() {
