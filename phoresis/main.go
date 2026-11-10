@@ -55,6 +55,7 @@ func main() {
 	tex := make2[float64](600, 200)
 	cut := int(hztobin(2500, nfft, float64(p.Samplerate)))
 	_, c1 := math.Modf(math.Log2(hztobin(32.703, nfft, float64(p.Samplerate))))
+	mx := 0.0
 	common.StftHandle(gr, nil, fft, [][]float64{win, windowDx(win), windowT(win)}, 0, 0, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		for ch := range p.Nch {
 			for w := range cut {
@@ -65,15 +66,26 @@ func main() {
 				cif := imag(windowed[1][0][ch][w]/windowed[0][0][ch][w]) / math.Pi
 				lgd := bitsafe(grainwrap(nfft, real(windowed[2][0][ch][w]/windowed[0][0][ch][w])))
 				_, x := math.Modf(math.Log2(float64(w)+cif) - c1)
-				x = clamp(0, 1, bitsafe(x))
+				if x != bitsafe(x) {
+					continue
+				}
+				x = clamp(0, 1, x)
 				y := clamp(0, 1, unmix(*fnf, *ftrim, atodb(abs)-60))
-				// y = clamp(0, 1, unmix(0, float64(len(tex[0])-1), y))
-				px := int(mix(0, float64(len(tex)-1), x))
-				py := int(mix(float64(len(tex[0])-1), 0, y))
+				px := int(math.Round(mix(0, float64(len(tex)-1), x)))
+				py := int(math.Round(mix(float64(len(tex[0])-1), 0, y)))
 				tex[px][py] += math.Abs(lgd / math.Hypot(cif, lgd))
+				mx = max(mx, tex[px][py])
 			}
 		}
 	})
+	d := -1.
+	for n := range tex {
+		a, _ := math.Modf(unmix(0, float64(len(tex)-1), float64(n)) * 12)
+		if a != d {
+			tex[n][len(tex[0])-1] = mx
+		}
+		d = a
+	}
 	for _, l := range tex {
 		oscope.Oscope(slices.Clone(l), oscope.Name(path.Base(*finputa)))
 	}
