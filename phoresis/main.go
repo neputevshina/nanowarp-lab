@@ -80,7 +80,7 @@ func main() {
 	})
 	d := -1.
 	for n := range tex {
-		a, _ := math.Modf(unmix(0, float64(len(tex)-1), float64(n)) * 12)
+		a, _ := math.Modf(unmix(0, float64(len(tex)), float64(n)) * 12)
 		if a != d {
 			tex[n][len(tex[0])-1] = mx
 		}
