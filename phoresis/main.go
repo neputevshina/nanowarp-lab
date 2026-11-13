@@ -181,7 +181,9 @@ func main() {
 				if x != bitsafe(x) {
 					continue
 				}
-				x = clamp(0, 1, x)
+				if x < 0 {
+					x++
+				}
 				y := clamp(0, 1, unmix(*fnf, *ftrim, atodb(abs)-60))
 				px := int(math.Round(mix(0, float64(len(tex)-1), x)))
 				py := int(math.Round(mix(float64(len(tex[0])-1), 0, y)))
