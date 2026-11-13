@@ -116,7 +116,7 @@ func main() {
 				out[w] = mid
 			}
 		}
-		common.StftHandle(gr, pw, fft, [][]float64{win, windowDx(win), windowT(win)}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
+		common.StftHandle(gr, pw, fft, [][]float64{win}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 			frames := windowed[0]
 			if first { // Accumulate lookahead.
 				for f := range frames[now:] {
@@ -169,14 +169,13 @@ func main() {
 	cut := int(hztobin(2500, nfft, float64(p.Samplerate)))
 	_, c0 := math.Modf(math.Log2(hztobin(32.703, nfft, float64(p.Samplerate))))
 	common.StftHandle(gr2, nil, fft, [][]float64{win, windowDx(win), windowT(win)}, 0, 0, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
-
 		for ch := range p.Nch {
 			for w := range cut {
 				abs := cmplx.Abs(windowed[0][0][ch][w])
 				if abs == 0 {
 					continue
 				}
-				cif := imag(windowed[1][0][ch][w]/windowed[0][0][ch][w]) / math.Pi / 2
+				cif := imag(windowed[1][0][ch][w]/windowed[0][0][ch][w]) / math.Pi
 				_, x := math.Modf(math.Log2(float64(w)+cif) - c0)
 				if x != bitsafe(x) {
 					continue
