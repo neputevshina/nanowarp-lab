@@ -17,9 +17,9 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 0, "horizontal radius, if less than or 0 equal to -l")
-var fvrad = flag.Int("v", 24, "vertical radius")
-var folap = flag.Int("l", 6, "overlap")
-var fnfft = flag.Int("nfft", 3840, "fft grain size")
+var fvrad = flag.Int("v", 7, "vertical radius")
+var folap = flag.Int("l", 5, "overlap")
+var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
 var fvib = flag.Int("vib", 0, "vertical vibrato radius")
 var ftonal = flag.Bool("t", false, "output tonals")
@@ -46,7 +46,7 @@ func main() {
 		panic(err)
 	}
 
-	nfft := *fnfft
+	nfft := pffft.NearestNfft(*fnfft)
 	hop := nfft / *folap
 	nbins := nfft/2 + 1
 
