@@ -40,10 +40,6 @@ func main() {
 		panic(err)
 	}
 
-	nfft := *fnfft
-	hop := nfft / *folap
-	nbins := nfft/2 + 1
-
 	wavr, err := wavio.NewDecoder(fa)
 	if err != nil {
 		// Try to call ffmpeg, we've probably got an MP3.
@@ -87,28 +83,33 @@ func main() {
 	}
 	p := wavr.Properties()
 
-	gr := dspio.NewGrainReader(nfft, hop, wavr)
+	hnfft := pffft.NearestNfft(3600 * p.Samplerate / 48000)
+	hnbins := hnfft/2 + 1
+
+	nfft := *fnfft
+	hop := nfft / *folap
+
+	gr := dspio.NewGrainReader(hnfft, hnbins, wavr)
 	pr, pw := dspio.GoPipe(p.Nch)
 	gr2 := dspio.NewGrainReader(nfft, hop, dspio.LimitReader(pr, p.Samples))
 
-	win := make([]float64, nfft)
-	hann(win)
-
 	go func() { // Process 1: HPSS tonal extraction.
-		fft := pffft.New(nfft)
-		bank := make([]*mediator[float64, struct{}], nbins)
-		hrad, vrad := *folap, 23
+		fft := pffft.New(hnfft)
+		win := make([]float64, hnfft)
+		hann(win)
+		bank := make([]*mediator[float64, struct{}], hnbins)
+		hrad, vrad := 5, 23
 		now := hrad
 		for i := range bank {
 			bank[i] = mediatorNew[float64, struct{}](hrad, hrad, 0.5)
 		}
 		vert := mediatorNew[float64, struct{}](vrad, vrad, 0.5)
-		magt := make([]float64, nbins)
+		magt := make([]float64, hnbins)
 		first := true
-		roto := make2[bool](now*2+1, nbins)
-		newroto := make([]int, nbins)
+		roto := make2[bool](now*2+1, hnbins)
+		newroto := make([]int, hnbins)
 		vib := func(out []float64, in [][]complex128) {
-			for w := range nbins {
+			for w := range hnbins {
 				mid := .0
 				for ch := range in {
 					mid += cmplx.Abs(in[ch][w])
@@ -121,7 +122,7 @@ func main() {
 			if first { // Accumulate lookahead.
 				for f := range frames[now:] {
 					vib(magt, frames[f])
-					for w := range nbins {
+					for w := range hnbins {
 						bank[w].Insert(magt[w], struct{}{}) // Insert two times imitating the mirroring.
 						bank[w].Insert(magt[w], struct{}{}) // Order probably won't matter.
 					}
@@ -138,7 +139,7 @@ func main() {
 					vert.Insert(mid, struct{}{})
 				}
 
-				for w := range nbins {
+				for w := range hnbins {
 					mid := magt[w]
 					v, _ := vert.Filt(mid, struct{}{})
 					h, _ := bank[w].Take()
@@ -146,7 +147,7 @@ func main() {
 					newroto[w] = int(boolfloat(roto[now][w]))
 				}
 
-				for w := range nbins {
+				for w := range hnbins {
 					m := boolfloat(newroto[w] <= 0) // Extract tonals
 					for ch := range out {
 						out[ch][w] = frames[now][ch][w] * complex(m, 0)
@@ -155,7 +156,7 @@ func main() {
 				roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
 				copy(roto, roto[1:])
 			}
-			for w := range nbins {
+			for w := range hnbins {
 				mid := magt[w]
 				bank[w].Insert(mid, struct{}{})
 			}
@@ -168,6 +169,8 @@ func main() {
 	mx := 0.0
 	cut := int(hztobin(2500, nfft, float64(p.Samplerate)))
 	_, c0 := math.Modf(math.Log2(hztobin(32.703, nfft, float64(p.Samplerate))))
+	win := make([]float64, nfft)
+	hann(win)
 	common.StftHandle(gr2, nil, fft, [][]float64{win, windowDx(win), windowT(win)}, 0, 0, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		for ch := range p.Nch {
 			for w := range cut {
