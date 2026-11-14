@@ -61,7 +61,7 @@ func main() {
 	}
 	defer wavw.Close()
 
-	gr := dspio.NewGrainReader(nfft, hop, wavr)
+	gr := dspio.NewOfflineGrainReader(nfft, hop, wavr)
 	fft := pffft.New(nfft)
 
 	// HPSS works best with windows with the smallest main lobe width,
