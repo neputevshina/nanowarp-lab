@@ -90,10 +90,11 @@ func main() {
 	}
 	smolv := mediatorNew[float64, struct{}](*fvib, *fvib, 1)
 	magt := make([]float64, nbins)
+	magt1 := make([]float64, nbins)
 	first := true
 	now := *fhrad
-	vib := func(out []float64, in [][]complex128) {
-		if *fvib != 0 {
+	vib := func(out []float64, in [][]complex128, ok bool) {
+		if *fvib != 0 && !ok {
 			for range *fvib {
 				smolv.Insert(0, struct{}{})
 			}
@@ -103,7 +104,7 @@ func main() {
 			for ch := range in {
 				mid += cmplx.Abs(in[ch][w])
 			}
-			if *fvib != 0 {
+			if *fvib != 0 && !ok {
 				out[w], _ = smolv.Filt(mid, struct{}{})
 			} else {
 				out[w] = mid
@@ -127,7 +128,7 @@ func main() {
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
-				vib(magt, frames[f])
+				vib(magt, frames[f], true)
 				for w := range nbins {
 					bank[w].Insert(magt[w], struct{}{}) // Insert two times imitating the mirroring.
 					bank[w].Insert(magt[w], struct{}{}) // Order probably won't matter.
@@ -135,9 +136,10 @@ func main() {
 			}
 			first = false
 		}
-		vib(magt, frames[len(frames)-1])
+		vib(magt, frames[len(frames)-1], false)
 		if !preanalyze {
-			vib(magt, frames[now])
+			vib(magt1, frames[now], true)
+			vib(magt, frames[now], false)
 			vert.Reset(*fvrad)
 			for w := range *fvrad { // Mirror the beginning
 				mid := magt[w]
@@ -146,9 +148,8 @@ func main() {
 				}
 				vert.Insert(mid, struct{}{})
 			}
-			ue := make([]float64, nbins)
 			for w := range nbins {
-				mid := magt[w]
+				mid := magt1[w]
 				if zerov {
 					mid = -mid
 				}
@@ -205,6 +206,7 @@ func main() {
 				// ue[w] = float64(newroto[w])
 			}
 			if *fseam {
+				ue := make([]float64, nbins)
 				field = append(field, slices.Clone(ue))
 				energy = append(energy, slices.Clone(ue))
 				energy2 = append(energy2, slices.Clone(ue))

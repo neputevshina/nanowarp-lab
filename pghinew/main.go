@@ -36,7 +36,7 @@ func main() {
 		panic(err)
 	}
 
-	const nbuf, hop = 3840, 640 / 2
+	const nbuf, hop = 3840, 640
 	const nfft = nbuf * 2
 	const nbins = nfft/2 + 1
 
@@ -55,7 +55,7 @@ func main() {
 	fft := pffft.New(nfft)
 
 	const (
-		trlen  = 12
+		trlen  = 6
 		height = 1
 		infl   = 10
 	)
