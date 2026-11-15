@@ -17,7 +17,7 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 0, "horizontal radius, if less than or 0 equal to -l")
-var fvrad = flag.Int("v", 7, "vertical radius")
+var fvrad = flag.Int("v", 23, "vertical radius")
 var folap = flag.Int("l", 5, "overlap")
 var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
