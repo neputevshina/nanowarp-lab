@@ -73,15 +73,33 @@ func main() {
 	for w := range nfft {
 		x := unmix(0, float64(nfft), float64(w))
 		// win[w] = math.Sin(math.Pi*x) // Sine, smudges
-		win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
+		// win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
+		c := math.Cos(math.Pi * (x + 0.5))
+		win[w] = math.Sin(math.Pi / 2 * c * c) // Vorbis
 	}
 
-	// // Triangular window.
-	// for w := range nfft / 2 {
-	// 	win[w] = unmix(0, float64(nfft/2), float64(w))
+	// { // Planck taper
+	// 	eps := 0.25
+	// 	for w := range nfft / 2 {
+	// 		n := float64(nfft)
+	// 		m := float64(w)
+	// 		if w < int(eps*n) {
+	// 			win[w] = 1 / (1 + math.Exp(eps*n/m-eps*n/(eps*n-m)))
+	// 		} else {
+	// 			win[w] = 1
+	// 		}
+	// 	}
+	// 	copy(win[nfft/2:], win[:nfft/2])
+	// 	slices.Reverse(win[nfft/2:])
 	// }
-	// for w := range nfft / 2 {
-	// 	win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
+
+	// { // Triangular window
+	// 	for w := range nfft / 2 {
+	// 		win[w] = unmix(0, float64(nfft/2), float64(w))
+	// 	}
+	// 	for w := range nfft / 2 {
+	// 		win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
+	// 	}
 	// }
 
 	if *fhrad == 0 {
