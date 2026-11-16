@@ -94,7 +94,7 @@ func main() {
 	first := true
 	now := *fhrad
 	vib := func(out []float64, in [][]complex128, ok bool) {
-		if *fvib != 0 && !ok {
+		if *fvib != 0 && ok {
 			smolv.Reset(*fvib)
 			for range *fvib { // Mirror the beginning of vibrato removal
 				smolv.Insert(0, struct{}{})
@@ -105,7 +105,7 @@ func main() {
 			for ch := range in {
 				mid += cmplx.Abs(in[ch][w])
 			}
-			if *fvib != 0 && !ok {
+			if *fvib != 0 && ok {
 				out[w], _ = smolv.Filt(mid, struct{}{})
 			} else {
 				out[w] = mid
@@ -129,7 +129,7 @@ func main() {
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
-				vib(magt, frames[f], true)
+				vib(magt, frames[f], false)
 				for w := range nbins {
 					bank[w].Insert(magt[w], struct{}{}) // Insert two times imitating the mirroring.
 					bank[w].Insert(magt[w], struct{}{}) // Order probably won't matter.
@@ -137,10 +137,9 @@ func main() {
 			}
 			first = false
 		}
-		vib(magt, frames[len(frames)-1], false)
 		if !preanalyze {
-			vib(magt1, frames[now], true)
-			vib(magt, frames[now], false)
+			vib(magt1, frames[now], false)
+			vib(magt, frames[now], true)
 			vert.Reset(*fvrad)
 			for w := range *fvrad { // Mirror the beginning
 				mid := magt[w]
