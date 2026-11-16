@@ -69,13 +69,20 @@ func main() {
 	// to be perfectly invertible after modifications.
 	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
-	// Triangular window.
-	for w := range nfft / 2 {
-		win[w] = unmix(0, float64(nfft/2), float64(w))
+
+	for w := range nfft {
+		x := unmix(0, float64(nfft), float64(w))
+		// win[w] = math.Sin(math.Pi*x) // Sine, smudges
+		win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
 	}
-	for w := range nfft / 2 {
-		win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
-	}
+
+	// // Triangular window.
+	// for w := range nfft / 2 {
+	// 	win[w] = unmix(0, float64(nfft/2), float64(w))
+	// }
+	// for w := range nfft / 2 {
+	// 	win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
+	// }
 
 	if *fhrad == 0 {
 		*fhrad = *folap
