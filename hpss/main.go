@@ -17,7 +17,7 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 0, "horizontal radius, if less than or 0 equal to -l")
-var fvrad = flag.Int("v", 13, "vertical radius")
+var fvrad = flag.Int("v", 41, "vertical radius")
 var folap = flag.Int("l", 5, "overlap")
 var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
@@ -96,8 +96,13 @@ func main() {
 	vib := func(out []float64, in [][]complex128, ok bool) {
 		if *fvib != 0 && ok {
 			smolv.Reset(*fvib)
-			for range *fvib { // Mirror the beginning of vibrato removal
-				smolv.Insert(0, struct{}{})
+			for w := *fvib - 1; w >= 0; w-- { // Mirror the beginning of vibrato removal
+				mid := .0
+				for ch := range in {
+					mid += cmplx.Abs(in[ch][w])
+				}
+				smolv.Insert(mid, struct{}{}) // Insert two times imitating the mirroring.
+				smolv.Insert(mid, struct{}{}) // Order probably won't matter.
 			}
 		}
 		for w := range nbins {
