@@ -29,6 +29,8 @@ var fvperc = flag.Int("pv", 50, "vertical percentile")
 var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
 var fseam = flag.Bool("seam", false, "output seam carved clips")
 
+var fwin = flag.String("w", `hann`, "use a `window`: hann, welch, vorbis, tri")
+
 func main() {
 	flag.Parse()
 	oscope.Enable = true
@@ -69,38 +71,29 @@ func main() {
 	// to be perfectly invertible after modifications.
 	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
-
-	for w := range nfft {
-		x := unmix(0, float64(nfft), float64(w))
-		// win[w] = math.Sin(math.Pi*x) // Sine, smudges
-		// win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
-		c := math.Cos(math.Pi * (x + 0.5))
-		win[w] = math.Sin(math.Pi / 2 * c * c) // Vorbis
+	switch *fwin {
+	case `hann`:
+		hann(win)
+	case `welch`:
+		for w := range nfft {
+			x := unmix(0, float64(nfft), float64(w))
+			win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
+		}
+	case `vorbis`:
+		for w := range nfft {
+			x := unmix(0, float64(nfft), float64(w))
+			c := math.Cos(math.Pi * (x + 0.5))
+			win[w] = math.Sin(math.Pi / 2 * c * c) // Vorbis
+			// win[w] = math.Sqrt(1 - x*x) // Circular, doesn't work
+		}
+	case `tri`:
+		for w := range nfft / 2 {
+			win[w] = unmix(0, float64(nfft/2), float64(w))
+		}
+		for w := range nfft / 2 {
+			win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
+		}
 	}
-
-	// { // Planck taper
-	// 	eps := 0.25
-	// 	for w := range nfft / 2 {
-	// 		n := float64(nfft)
-	// 		m := float64(w)
-	// 		if w < int(eps*n) {
-	// 			win[w] = 1 / (1 + math.Exp(eps*n/m-eps*n/(eps*n-m)))
-	// 		} else {
-	// 			win[w] = 1
-	// 		}
-	// 	}
-	// 	copy(win[nfft/2:], win[:nfft/2])
-	// 	slices.Reverse(win[nfft/2:])
-	// }
-
-	// { // Triangular window
-	// 	for w := range nfft / 2 {
-	// 		win[w] = unmix(0, float64(nfft/2), float64(w))
-	// 	}
-	// 	for w := range nfft / 2 {
-	// 		win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
-	// 	}
-	// }
 
 	if *fhrad == 0 {
 		*fhrad = *folap
