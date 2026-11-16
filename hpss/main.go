@@ -95,7 +95,8 @@ func main() {
 	now := *fhrad
 	vib := func(out []float64, in [][]complex128, ok bool) {
 		if *fvib != 0 && !ok {
-			for range *fvib {
+			smolv.Reset(*fvib)
+			for range *fvib { // Mirror the beginning of vibrato removal
 				smolv.Insert(0, struct{}{})
 			}
 		}
