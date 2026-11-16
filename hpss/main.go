@@ -21,7 +21,7 @@ var fvrad = flag.Int("v", 23, "vertical radius")
 var folap = flag.Int("l", 5, "overlap")
 var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
-var fvib = flag.Int("vib", 7, "vertical vibrato radius, 0 to disable")
+var fvib = flag.Int("vib", 5, "vertical vibrato radius, 0 to disable")
 var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
@@ -69,7 +69,13 @@ func main() {
 	// to be perfectly invertible after modifications.
 	// Meaning, a rectangular or a Tukey window will produce artifacts.
 	win := make([]float64, nfft)
-	hann(win)
+	// Triangular window.
+	for w := range nfft / 2 {
+		win[w] = unmix(0, float64(nfft/2), float64(w))
+	}
+	for w := range nfft / 2 {
+		win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
+	}
 
 	if *fhrad == 0 {
 		*fhrad = *folap
