@@ -17,11 +17,11 @@ import (
 
 var finputa = flag.String("a", "", "source WAV")
 var fhrad = flag.Int("h", 0, "horizontal radius, if less than or 0 equal to -l")
-var fvrad = flag.Int("v", 41, "vertical radius")
+var fvrad = flag.Int("v", 23, "vertical radius")
 var folap = flag.Int("l", 5, "overlap")
 var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
-var fvib = flag.Int("vib", 0, "vertical vibrato radius, 5 is good")
+var fvib = flag.Int("vib", 7, "vertical vibrato radius, 0 to disable")
 var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
