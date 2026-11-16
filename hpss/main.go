@@ -29,7 +29,7 @@ var fvperc = flag.Int("pv", 50, "vertical percentile")
 var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
 var fseam = flag.Bool("seam", false, "output seam carved clips")
 
-var fwin = flag.String("w", `hann`, "use a `window`: hann, welch, vorbis, tri")
+var fwin = flag.String("w", `hann`, "use a `window`: hann, welch, vorbis, tri, kaiser")
 
 func main() {
 	flag.Parse()
@@ -93,6 +93,10 @@ func main() {
 		for w := range nfft / 2 {
 			win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
 		}
+	case `kaiser`:
+		win = kaiser(nfft, 3)
+	default:
+		panic(`unknown window type`)
 	}
 
 	if *fhrad == 0 {
