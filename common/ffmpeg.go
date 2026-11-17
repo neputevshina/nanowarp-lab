@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,13 +11,13 @@ import (
 	"github.com/neputevshina/nanowarp/dspio/wavio"
 )
 
-func INeedAWav(fp string) *wavio.Decoder {
+func INeedAWav(fp string) (wavr *wavio.Decoder) {
 	fa, err := os.Open(fp)
 	if err != nil {
 		panic(err)
 	}
 
-	wavr, err := wavio.NewDecoder(fa)
+	wavr, err = wavio.NewDecoder(fa)
 	if err != nil {
 		// Try to call ffmpeg, we've probably got an MP3.
 		if err == wavio.ErrNotAWav {
@@ -34,6 +35,19 @@ func INeedAWav(fp string) *wavio.Decoder {
 			}
 
 			ex := path.Join(os.TempDir(), path.Base(s2)) + `.wav`
+			_, xerr := os.Stat(ex)
+			if !errors.Is(xerr, os.ErrNotExist) {
+				// Already converted
+				fa, err = os.Open(ex)
+				if err != nil {
+					panic(err)
+				}
+				wavr, err = wavio.NewDecoder(fa)
+				if err == nil {
+					return
+				}
+				// Broken, reconvert
+			}
 
 			cmd := exec.Command(`ffmpeg`, `-v`, `warning`, `-y`, `-i`, s2, `-acodec`, `pcm_f32le`, ex)
 			cmd.Stderr = os.Stderr
@@ -57,5 +71,5 @@ func INeedAWav(fp string) *wavio.Decoder {
 			}
 		}
 	}
-	return wavr
+	return
 }
