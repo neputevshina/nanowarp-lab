@@ -64,28 +64,15 @@ func main() {
 	win := make([]float64, nfft)
 	switch *fwin {
 	case `hann`:
-		hann(win)
+		common.Hann(win)
 	case `welch`:
-		for w := range nfft {
-			x := unmix(0, float64(nfft), float64(w))
-			win[w] = 1 - (2*x-1)*(2*x-1) // Welch, lags
-		}
+		common.Welch(win)
 	case `vorbis`:
-		for w := range nfft {
-			x := unmix(0, float64(nfft), float64(w))
-			c := math.Cos(math.Pi * (x + 0.5))
-			win[w] = math.Sin(math.Pi / 2 * c * c) // Vorbis
-			// win[w] = math.Sqrt(1 - x*x) // Circular, doesn't work
-		}
+		common.Vorbis(win)
 	case `tri`:
-		for w := range nfft / 2 {
-			win[w] = unmix(0, float64(nfft/2), float64(w))
-		}
-		for w := range nfft / 2 {
-			win[nfft/2:][w] = unmix(float64(nfft/2), 0, float64(w))
-		}
+		common.Tri(win)
 	case `kaiser`:
-		win = kaiser(nfft, 3)
+		win = common.Kaiser(nfft, 3)
 	default:
 		panic(`unknown window type`)
 	}
@@ -133,7 +120,8 @@ func main() {
 	}
 	roto := make2[bool](now*2+1, nbins)
 	newroto := make([]int, nbins)
-	common.StftHandle(gr, wavw, fft, [][]float64{win, windowDx(win), windowT(win)}, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
+	wins := [][]float64{win, common.WindowDx(win), common.WindowT(win)}
+	common.StftHandle(gr, wavw, fft, wins, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
 		// Accumulate lookahead.
 		if first {
@@ -252,44 +240,6 @@ func unmix[F constraints.Float](a, b, x F) F {
 
 func mix[F constraints.Float](a, b, x F) F {
 	return a*(1-x) + b*x
-}
-
-// hann is a Hann window function.
-//
-// Dual to itself (achieves COLA/perfect reconstruction) at any integer overlap greater than 2.
-func hann(out []float64) {
-	for i := range out {
-		x := float64(i) / float64(len(out))
-		out[i] = 0.5 * (1 - math.Cos(2*math.Pi*x))
-	}
-}
-
-// windowT calculates the time ramp multiplied window
-// function for time-frequency reassignment.
-func windowT(w []float64) (out []float64) {
-	out = make([]float64, len(w))
-	n := float64(len(w))
-	for i := range w {
-		out[i] = w[i] * mix(-n/2, n/2+1, float64(i)/n)
-	}
-	return
-}
-
-// windowDx calculates the derivative of w using DFT.
-func windowDx(w []float64) (out []float64) {
-	out = make([]float64, len(w))
-	f := pffft.New(len(w))
-	s := f.Coefficients(nil, w)
-	for i := range s {
-		s[i] *= complex(0, float64(i))
-		s[i] /= complex(float64(len(w)), 0)
-	}
-	s[len(w)/2] = 0
-	f.Sequence(out, s)
-	for i := range out {
-		out[i] = -out[i] * math.Pi * 2
-	}
-	return
 }
 
 func grainwrap(nfft int, x float64) float64 {
