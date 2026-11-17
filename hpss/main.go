@@ -25,7 +25,7 @@ var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
 
-var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
+var fcif = flag.Bool("cif", true, "backtrack hpss mask by cif displacement")
 
 var fwin = flag.String("w", `kaiser`, "use a `window`: hann, welch, vorbis, tri, kaiser")
 
@@ -33,10 +33,6 @@ func main() {
 	flag.Parse()
 	oscope.Enable = true
 
-	fa, err := os.Open(*finputa)
-	if err != nil {
-		panic(err)
-	}
 	name := "./perc.wav"
 	if *ftonal {
 		name = "./harm.wav"
@@ -50,10 +46,7 @@ func main() {
 	hop := nfft / *folap
 	nbins := nfft/2 + 1
 
-	wavr, err := wavio.NewDecoder(fa)
-	if err != nil {
-		panic(err)
-	}
+	wavr := common.INeedAWav(*finputa)
 	p := wavr.Properties()
 	wavw, err := wavio.NewEncoder(fo, p.Samplerate, p.Nch, wavio.FormatFloat, 32)
 	if err != nil {
