@@ -101,20 +101,16 @@ func main() {
 		*fhrad = *folap
 	}
 
-	zeroh, zerov := *fhrad**fhperc/100 == 0, *fvrad**fvperc/100 == 0
 	bank := make([]*mediator[float64, struct{}], nbins)
 	for i := range bank {
-		if zeroh {
-			bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, 1)
-		} else {
-			bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, float64(*fhperc)/100)
-		}
+		bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, float64(*fhperc)/100)
 	}
 	vert := mediatorNew[float64, struct{}](*fvrad, *fvrad, float64(*fvperc)/100)
-	if zerov {
-		vert = mediatorNew[float64, struct{}](*fvrad, *fvrad, 1)
-	}
 	smolv := mediatorNew[float64, struct{}](*fvib, *fvib, 1)
+	smolbank := make([]*mediator[float64, struct{}], nbins)
+	for i := range smolbank {
+		smolbank[i] = mediatorNew[float64, struct{}](*folap, *folap, 1)
+	}
 	magt := make([]float64, nbins)
 	magt1 := make([]float64, nbins)
 	first := true
@@ -163,30 +159,11 @@ func main() {
 			vib(magt, frames[now], true)
 			vert.Reset(*fvrad)
 			for w := range *fvrad { // Mirror the beginning
-				mid := magt[w]
-				if zerov {
-					mid = -mid
-				}
-				vert.Insert(mid, struct{}{})
+				vert.Insert(magt[w], struct{}{})
 			}
 			for w := range nbins {
-				mid := magt1[w]
-				if zerov {
-					mid = -mid
-				}
-				v, _ := vert.Filt(mid, struct{}{})
-				if zerov {
-					v = -v
-				}
+				v, _ := vert.Filt(magt1[w], struct{}{})
 				h, _ := bank[w].Take()
-				if zeroh {
-					h = -h
-				}
-				// lgd := grainwrap(nfft, real(windowed[2][now][0][w]/frames[now][0][w]))
-				// disp := int(math.Round(lgd / float64(hop)))
-				// m := boolfloat(v > h || roto[min(now+disp, now)][w])
-				// _ = disp
-				// m := boolfloat(v > h)
 				roto[now][w] = v > h
 				newroto[w] = int(boolfloat(roto[now][w]))
 			}
@@ -221,18 +198,9 @@ func main() {
 			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
 			copy(roto, roto[1:])
 		}
-		// Vibrato filtering (doesn't work).
-		for w := range nbins {
-			mid := magt[w]
-			if zeroh {
-				mid = -mid
-			}
-			bank[w].Insert(mid, struct{}{})
+		for w := range nbins { // Vibrato filtering
+			bank[w].Insert(magt[w], struct{}{})
 		}
-		// // Include the point if its LGD maps to the percussive frame.
-		// // Use finite phase reassignment as a bodge.
-		// c := float64(wavr.Properties().Samplerate*nfft) / (4 * math.Pi)
-		// (We actually need to save the mask for this)
 	})
 
 	oscope.Dump(nil, ".")

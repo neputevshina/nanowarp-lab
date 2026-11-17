@@ -8,11 +8,11 @@
 package main
 
 import (
-	"cmp"
+	"golang.org/x/exp/constraints"
 )
 
 // mediator - rank keeping structure
-type mediator[T cmp.Ordered, I any] struct {
+type mediator[T constraints.Float, I any] struct {
 	pos   []int // index into `heap` for each value (signed position)
 	heap  []int // underlying storage
 	maxN  int   // allocated size
@@ -23,12 +23,13 @@ type mediator[T cmp.Ordered, I any] struct {
 
 	rawrank float64
 	rank    int
+	invrank bool
 	data    []T
 	more    []I
 }
 
 // Creates new Mediator: to calculate `nItems` running rank.
-func mediatorNew[T cmp.Ordered, I any](maxnItems, nItems int, rank float64) *mediator[T, I] {
+func mediatorNew[T constraints.Float, I any](maxnItems, nItems int, rank float64) *mediator[T, I] {
 	if nItems > maxnItems {
 		panic("nItems > maxnItems")
 	}
@@ -39,6 +40,10 @@ func mediatorNew[T cmp.Ordered, I any](maxnItems, nItems int, rank float64) *med
 	m.more = make([]I, maxnItems*2)
 	m.maxN = maxnItems
 	m.N = nItems
+	if rank == 0 {
+		m.rawrank = 1
+		m.invrank = true
+	}
 	m.rawrank = rank
 	m.Reset(nItems)
 	return m
@@ -140,11 +145,17 @@ func (m *mediator[T, I]) Reset(nItems int) {
 
 func (m *mediator[T, I]) Take() (v T, a I) {
 	c := m.heap[m.rank]
+	if m.invrank {
+		return -m.data[c], m.more[c]
+	}
 	return m.data[c], m.more[c]
 }
 
 // Inserts item, maintains rank in O(lg nItems)
 func (m *mediator[T, I]) Insert(v T, a I) {
+	if m.invrank {
+		v = -v
+	}
 	p := m.pos[m.idx]
 	old := m.data[m.idx]
 	m.data[m.idx] = v
