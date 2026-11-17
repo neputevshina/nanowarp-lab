@@ -27,7 +27,7 @@ var fvperc = flag.Int("pv", 50, "vertical percentile")
 
 var fcif = flag.Bool("cif", false, "backtrack hpss mask by cif displacement")
 
-var fwin = flag.String("w", `hann`, "use a `window`: hann, welch, vorbis, tri, kaiser")
+var fwin = flag.String("w", `kaiser`, "use a `window`: hann, welch, vorbis, tri, kaiser")
 
 func main() {
 	flag.Parse()
@@ -123,8 +123,7 @@ func main() {
 				for ch := range in {
 					mid += cmplx.Abs(in[ch][w])
 				}
-				smolv.Insert(mid, struct{}{}) // Insert two times imitating the mirroring.
-				smolv.Insert(mid, struct{}{}) // Order probably won't matter.
+				smolv.Insert(mid, struct{}{})
 			}
 		}
 		for w := range nbins {
@@ -158,7 +157,7 @@ func main() {
 			vib(magt1, frames[now], false)
 			vib(magt, frames[now], true)
 			vert.Reset(*fvrad)
-			for w := range *fvrad { // Mirror the beginning
+			for w := *fvrad - 1; w >= 0; w-- { // Mirror the beginning
 				vert.Insert(magt[w], struct{}{})
 			}
 			for w := range nbins {
