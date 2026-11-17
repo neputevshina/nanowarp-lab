@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/neputevshina/nanowarp-lab/common"
+	"github.com/neputevshina/nanowarp-lab/common/window"
 	"github.com/neputevshina/nanowarp/dspio"
 	"github.com/neputevshina/nanowarp/dspio/wavio"
 	"github.com/neputevshina/nanowarp/oscope"
@@ -64,15 +65,15 @@ func main() {
 	win := make([]float64, nfft)
 	switch *fwin {
 	case `hann`:
-		common.Hann(win)
+		window.Hann(win)
 	case `welch`:
-		common.Welch(win)
+		window.Welch(win)
 	case `vorbis`:
-		common.Vorbis(win)
+		window.Vorbis(win)
 	case `tri`:
-		common.Tri(win)
+		window.Tri(win)
 	case `kaiser`:
-		win = common.Kaiser(nfft, 3)
+		win = window.Kaiser(nfft, 3)
 	default:
 		panic(`unknown window type`)
 	}
@@ -120,7 +121,7 @@ func main() {
 	}
 	roto := make2[bool](now*2+1, nbins)
 	newroto := make([]int, nbins)
-	wins := [][]float64{win, common.WindowDx(win), common.WindowT(win)}
+	wins := [][]float64{win, window.Dx(win), window.T(win)}
 	common.StftHandle(gr, wavw, fft, wins, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
 		// Accumulate lookahead.

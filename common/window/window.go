@@ -1,4 +1,4 @@
-package common
+package window
 
 import (
 	"math"
@@ -123,9 +123,9 @@ func AvciNacaroglu(out []float64, a float64) {
 	}
 }
 
-// WindowT calculates the time ramp multiplied window
+// T calculates the time ramp multiplied window
 // function for time-frequency reassignment.
-func WindowT(w []float64) (out []float64) {
+func T(w []float64) (out []float64) {
 	out = make([]float64, len(w))
 	n := float64(len(w))
 	for i := range w {
@@ -134,8 +134,8 @@ func WindowT(w []float64) (out []float64) {
 	return
 }
 
-// WindowDx calculates the derivative of w using DFT.
-func WindowDx(w []float64) (out []float64) {
+// Dx calculates the derivative of w using DFT.
+func Dx(w []float64) (out []float64) {
 	out = make([]float64, len(w))
 	f := fourier.NewFFT(len(w))
 	s := f.Coefficients(nil, w)
