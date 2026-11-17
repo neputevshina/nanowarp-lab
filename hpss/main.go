@@ -158,7 +158,7 @@ func main() {
 			vib(magt, frames[now], true)
 			vert.Reset(*fvrad)
 			for w := *fvrad - 1; w >= 0; w-- { // Mirror the beginning
-				vert.Insert(magt[w], struct{}{})
+				vert.Insert(magt1[w], struct{}{})
 			}
 			for w := range nbins {
 				v, _ := vert.Filt(magt1[w], struct{}{})
