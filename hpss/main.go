@@ -91,6 +91,7 @@ func main() {
 	}
 	magt := make([]float64, nbins)
 	magt1 := make([]float64, nbins)
+	magt2 := make([]float64, nbins)
 
 	first := true
 	now := *fhrad
@@ -98,11 +99,10 @@ func main() {
 	smolv := newvert(*fvib, 1)
 	vib := func(out []float64, in [][]complex128, ok bool) {
 		for w := range nbins {
-			mid := .0
+			out[w] = .0
 			for ch := range in {
-				mid += cmplx.Abs(in[ch][w])
+				out[w] += cmplx.Abs(in[ch][w])
 			}
-			out[w] = mid
 		}
 		if *fvib != 0 && ok {
 			smolv.Filt(out)
@@ -119,6 +119,7 @@ func main() {
 			for f := range frames[now:] {
 				vib(magt, frames[f], false)
 				bank.Insert(magt)
+				bank.Insert(magt)
 			}
 			first = false
 		}
@@ -126,10 +127,11 @@ func main() {
 			vib(magt1, frames[now], false)
 			vib(magt, frames[now], true)
 			vert.Filt(magt1)
-			bank.Filt(magt)
+			bank.Take(magt2)
 			for w := range nbins {
-				roto[now][w] = magt1[w] > magt[w]
+				roto[now][w] = magt1[w] > magt2[w]
 			}
+			bank.Insert(magt)
 			if *fcif {
 				// Backpropagate the mask vertically by vertical bin shift (CIF).
 				clear(newroto)
@@ -161,7 +163,6 @@ func main() {
 			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
 			copy(roto, roto[1:])
 		}
-		bank.Insert(magt) // Vibrato filtering
 	})
 
 	oscope.Dump(nil, ".")
