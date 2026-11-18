@@ -119,7 +119,6 @@ func main() {
 			for f := range frames[now:] {
 				vib(magt, frames[f], false)
 				bank.Insert(magt)
-				bank.Insert(magt)
 			}
 			first = false
 		}
