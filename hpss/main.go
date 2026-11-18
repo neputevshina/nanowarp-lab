@@ -21,7 +21,7 @@ var fvrad = flag.Int("v", 13, "vertical radius")
 var folap = flag.Int("l", 5, "overlap")
 var fnfft = flag.Int("nfft", 3600, "fft grain size")
 
-var fvib = flag.Int("vib", 7, "vertical vibrato radius, 0 to disable")
+var fvib = flag.Int("vib", 6, "vertical vibrato radius, 0 to disable")
 var ftonal = flag.Bool("t", false, "output tonals")
 var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
@@ -82,43 +82,33 @@ func main() {
 		*fhrad = *folap
 	}
 
-	bank := make([]*mediator[float64, struct{}], nbins)
-	for i := range bank {
-		bank[i] = mediatorNew[float64, struct{}](*fhrad, *fhrad, float64(*fhperc)/100)
-	}
-	vert := mediatorNew[float64, struct{}](*fvrad, *fvrad, float64(*fvperc)/100)
-	smolv := mediatorNew[float64, struct{}](*fvib, *fvib, 1)
+	bank := newhoriz(nbins, *fhrad, float64(*fhperc)/100)
+	vert := newvert(*fvrad, float64(*fvperc)/100)
+
 	smolbank := make([]*mediator[float64, struct{}], nbins)
 	for i := range smolbank {
 		smolbank[i] = mediatorNew[float64, struct{}](*folap, *folap, 1)
 	}
 	magt := make([]float64, nbins)
 	magt1 := make([]float64, nbins)
+
 	first := true
 	now := *fhrad
+
+	smolv := newvert(*fvib, 1)
 	vib := func(out []float64, in [][]complex128, ok bool) {
-		if *fvib != 0 && ok {
-			smolv.Reset(*fvib)
-			for w := *fvib - 1; w >= 0; w-- { // Mirror the beginning of vibrato removal
-				mid := .0
-				for ch := range in {
-					mid += cmplx.Abs(in[ch][w])
-				}
-				smolv.Insert(mid, struct{}{})
-			}
-		}
 		for w := range nbins {
 			mid := .0
 			for ch := range in {
 				mid += cmplx.Abs(in[ch][w])
 			}
-			if *fvib != 0 && ok {
-				out[w], _ = smolv.Filt(mid, struct{}{})
-			} else {
-				out[w] = mid
-			}
+			out[w] = mid
+		}
+		if *fvib != 0 && ok {
+			smolv.Filt(out)
 		}
 	}
+
 	roto := make2[bool](now*2+1, nbins)
 	newroto := make([]int, nbins)
 	wins := [][]float64{win, window.Dx(win), window.T(win)}
@@ -128,25 +118,17 @@ func main() {
 		if first {
 			for f := range frames[now:] {
 				vib(magt, frames[f], false)
-				for w := range nbins {
-					bank[w].Insert(magt[w], struct{}{}) // Insert two times imitating the mirroring.
-					bank[w].Insert(magt[w], struct{}{}) // Order probably won't matter.
-				}
+				bank.Insert(magt)
 			}
 			first = false
 		}
 		if !preanalyze {
 			vib(magt1, frames[now], false)
 			vib(magt, frames[now], true)
-			vert.Reset(*fvrad)
-			for w := *fvrad - 1; w >= 0; w-- { // Mirror the beginning
-				vert.Insert(magt1[w], struct{}{})
-			}
+			vert.Filt(magt1)
+			bank.Filt(magt)
 			for w := range nbins {
-				v, _ := vert.Filt(magt1[w], struct{}{})
-				h, _ := bank[w].Take()
-				roto[now][w] = v > h
-				newroto[w] = int(boolfloat(roto[now][w]))
+				roto[now][w] = magt1[w] > magt[w]
 			}
 			if *fcif {
 				// Backpropagate the mask vertically by vertical bin shift (CIF).
@@ -179,12 +161,57 @@ func main() {
 			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
 			copy(roto, roto[1:])
 		}
-		for w := range nbins { // Vibrato filtering
-			bank[w].Insert(magt[w], struct{}{})
-		}
+		bank.Insert(magt) // Vibrato filtering
 	})
 
 	oscope.Dump(nil, ".")
+}
+
+type horiz struct {
+	a []*mediator[float64, struct{}]
+}
+
+func newhoriz(nbins, n int, pc float64) *horiz {
+	bank := make([]*mediator[float64, struct{}], nbins)
+	for i := range bank {
+		bank[i] = mediatorNew[float64, struct{}](n, n, pc)
+	}
+	return &horiz{a: bank}
+}
+
+func (b *horiz) Insert(f []float64) {
+	for w := range len(f) {
+		b.a[w].Insert(f[w], struct{}{})
+	}
+}
+
+func (b *horiz) Take(f []float64) {
+	for w := range len(f) {
+		f[w], _ = b.a[w].Take()
+	}
+}
+
+func (b *horiz) Filt(f []float64) {
+	b.Insert(f)
+	b.Take(f)
+}
+
+type vert struct {
+	a *mediator[float64, struct{}]
+}
+
+func newvert(n int, pc float64) *vert {
+	return &vert{a: mediatorNew[float64, struct{}](n, n, pc)}
+}
+
+func (b *vert) Filt(f []float64) {
+	b.a.Reset(b.a.N)
+	for w := b.a.N - 1; w >= 0; w-- { // Mirror the beginning
+		b.a.Insert(f[w], struct{}{})
+	}
+	for w := range f {
+		f[w], _ = b.a.Filt(f[w], struct{}{})
+	}
 }
 
 const (

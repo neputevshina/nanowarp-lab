@@ -14,13 +14,23 @@ import (
 // Same as [StftHandle], but all windows are applied and producer can push a frame (which will be inverted
 // with dual of windows[0]) anytime. Pushing frames does not work while preanalyze is true.
 //
-// frames of producer is addressed like [window][frame][channel][bin]complex128.
+// WarpHandle uses master phasor as its timecode. Nominal phasor is optional and is sampled to snominal to get
+// a stretch value for the case when phasor is bent by transients when original coefficient is needed.
+// Envelopes are sampled in output time base.
+//
+// frames are mapped as
+//
+//	[window number][shift][channel][bin]float64
+//
+// The size of frames in producer is future+past+1, where the current frame (with the same number as ‘out’)
+// is given by frames[...][past].
 //
 // It does not try to write to wr if it is nil. Changing gr.Hop while this routine is working will
 // produce broken synthesis result.
-func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter, phasor *nanowarp.Phasor,
+func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter,
+	master, nominal *nanowarp.Phasor, envelopes []*nanowarp.Envelope,
 	fft pffft.Fourier, grainsize, synthhop int, windows [][]float64, future int, past int,
-	producer func(push func(out [][]complex128), frames [][][][]complex128, stretch float64, preanalyze bool)) error {
+	producer func(push func(out [][]complex128), frames [][][][]complex128, stretch, snominal float64, envelope []float64, preanalyze bool)) error {
 	nch := gr.NchRead()
 	if nch != wr.NchWrite() {
 		panic(`WarpHandle: different number of channels between reader and writer`)
@@ -47,9 +57,12 @@ func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter, phasor *nanowarp.Ph
 	)
 
 	nfft := fft.Len()
+	nvl := make([]float64, len(envelopes))
+
 	for j := -grainsize / 2; ; j += synthhop {
-		i := int(phasor.ReverseSample(float64(j)))
-		c := 1 / phasor.Dy(float64(j)) // Stretch, inverse of scan speed, which Dy is.
+		i := int(master.ReverseSample(float64(j)))
+		c := 1 / master.Dy(float64(j))   // Stretch, inverse of scan speed, which Dy is.
+		cn := 1 / nominal.Dy(float64(j)) // Nominal stretch.
 
 		if countup >= 0 {
 			countup++
@@ -70,6 +83,9 @@ func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter, phasor *nanowarp.Ph
 			}
 		}
 		var werr error
+		for n := range nvl {
+			nvl[n] = envelopes[n].Sample(float64(j))
+		}
 		producer(func(out [][]complex128) {
 			if werr != nil || countdown > 0 {
 				return
@@ -80,7 +96,7 @@ func WarpHandle(gr dspio.GrainSeeker, wr dspio.SignalWriter, phasor *nanowarp.Ph
 				floats.Mul(grain[ch], dual)
 			}
 			_, werr = gw.SignalWrite(nil, grain)
-		}, frames, c, countdown > 0)
+		}, frames, c, cn, nvl, countdown > 0)
 		if werr != nil {
 			return werr
 		}

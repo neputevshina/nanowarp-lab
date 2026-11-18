@@ -15,7 +15,8 @@ import (
 // applies windowing, gain normalization, performs FFT on the signal and gives it for consumer to process it.
 // The transform can be oversampled/downsampled if rd.N() ≠ fft.Len().
 // Synthesis windowing is applied with automatically generated dual of the given window function.
-// frames is mapped as
+//
+// frames are mapped as
 //
 //	[window number][shift][channel][bin]float64
 //
