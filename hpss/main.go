@@ -27,13 +27,17 @@ var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
 
 var fcif = flag.Bool("cif", true, "backtrack hpss mask by cif displacement")
-var ffat = flag.Bool("fat", false, "dilate vertical activations horizontally")
+var ffat = flag.Int("fat", 0, "dilate vertical activations horizontally, 0 disable, -1 → olap")
 
 var fwin = flag.String("w", `kaiser`, "use a `window`: hann, welch, vorbis, tri, kaiser")
 
 func main() {
 	flag.Parse()
 	oscope.Enable = true
+
+	if *ffat == -1 {
+		*ffat = *folap
+	}
 
 	name := "./perc.wav"
 	if *ftonal {
@@ -95,7 +99,7 @@ func main() {
 	d := make([]float64, nbins)
 
 	first := true
-	now := *fhrad
+	now := max(*fhrad, *ffat)
 
 	mono := func(out []float64, in [][]complex128) {
 		for w := range nbins {
@@ -111,6 +115,7 @@ func main() {
 	wins := [][]float64{win, window.Dx(win), window.T(win)}
 	common.StftHandle(gr, wavw, fft, wins, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
+
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
@@ -120,64 +125,66 @@ func main() {
 				}
 				bank.Insert(mid)
 			}
-			for f := range frames[*folap:] {
+			for f := range frames[now:] {
 				mono(mid, frames[f])
 				smolbank.Insert(mid)
 			}
 			first = false
 		}
-		if !preanalyze {
-			mono(mid, frames[now])
-
-			if *ffat {
-				smolbank.Insert(mid)
-				smolbank.Take(d)
-			} else {
-				copy(d, mid)
-			}
-			vert.Filtout(d, a)
-
-			bank.Take(b)
-			if *fvib != 0 {
-				smolv.Filtout(mid, c)
-			}
-			bank.Insert(c)
-
-			for w := range nbins {
-				roto[now][w] = a[w] > b[w]
-			}
-
-			if *fcif {
-				// Backpropagate the mask vertically by vertical bin shift (CIF).
-				clear(newroto)
-				for w := range nbins {
-					cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
-					y := max(0, min(int(math.Round(float64(w)+cif)), nbins-1))
-					if roto[now][y] {
-						newroto[w]++
-					} else {
-						newroto[w]--
-					}
-					if roto[now][w] {
-						newroto[y]++
-					} else {
-						newroto[y]--
-					}
-				}
-			}
-			for w := range nbins {
-				m := boolfloat(newroto[w] > 0)
-				if *ftonal {
-					m = 1 - m
-				}
-				for ch := range out {
-					out[ch][w] = frames[now][ch][w] * complex(m, 0)
-				}
-			}
-
-			roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
-			copy(roto, roto[1:])
+		if preanalyze {
+			return
 		}
+
+		mono(mid, frames[now])
+		if *ffat > 0 {
+			smolbank.Insert(mid)
+			smolbank.Take(d)
+		} else {
+			copy(d, mid)
+		}
+		vert.Filtout(d, a)
+
+		bank.Take(b)
+		if *fvib != 0 {
+			smolv.Filtout(mid, c)
+		}
+		bank.Insert(c)
+
+		for w := range nbins {
+			roto[now][w] = a[w] > b[w]
+		}
+
+		if *fcif {
+			// Backpropagate the mask vertically by vertical bin shift (CIF).
+			clear(newroto)
+			for w := range nbins {
+				cif := imag(windowed[1][now][0][w]/frames[now][0][w]) / math.Pi / 2
+				y := max(0, min(int(math.Round(float64(w)+cif)), nbins-1))
+				if roto[now][y] {
+					newroto[w]++
+				} else {
+					newroto[w]--
+				}
+				if roto[now][w] {
+					newroto[y]++
+				} else {
+					newroto[y]--
+				}
+			}
+		}
+		for w := range nbins {
+			m := boolfloat(newroto[w] > 0)
+			if *ftonal {
+				m = 1 - m
+			}
+			for ch := range out {
+				out[ch][w] = frames[now][ch][w] * complex(m, 0)
+			}
+		}
+
+		roto[len(roto)-1], roto[0] = roto[0], roto[len(roto)-1]
+		copy(roto, roto[1:])
+
 	})
 
 	oscope.Dump(nil, ".")
