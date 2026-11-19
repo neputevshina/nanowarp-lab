@@ -116,7 +116,7 @@ func main() {
 		frames := windowed[0]
 
 		if *ffat > 0 {
-			mono(mid, frames[now])
+			mono(mid, frames[now-1])
 			smolbank.Insert(mid)
 			smolbank.Take(d)
 		} else {
@@ -125,8 +125,8 @@ func main() {
 		}
 		vert.Filtout(d, a)
 
-		mono(mid, frames[now])
 		bank.Take(b)
+		mono(mid, frames[now-1])
 		if *fvib != 0 {
 			smolv.Filtout(mid, c)
 		}
