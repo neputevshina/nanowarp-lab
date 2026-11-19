@@ -135,15 +135,17 @@ func main() {
 			return
 		}
 
-		mono(mid, frames[now])
 		if *ffat > 0 {
+			mono(mid, frames[now])
 			smolbank.Insert(mid)
 			smolbank.Take(d)
 		} else {
+			mono(mid, frames[now])
 			copy(d, mid)
 		}
 		vert.Filtout(d, a)
 
+		mono(mid, frames[now])
 		bank.Take(b)
 		if *fvib != 0 {
 			smolv.Filtout(mid, c)
