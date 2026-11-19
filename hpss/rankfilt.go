@@ -43,8 +43,9 @@ func mediatorNew[T constraints.Float, I any](maxnItems, nItems int, rank float64
 	if rank == 0 {
 		m.rawrank = 1
 		m.invrank = true
+	} else {
+		m.rawrank = rank
 	}
-	m.rawrank = rank
 	m.Reset(nItems)
 	return m
 }

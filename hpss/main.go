@@ -27,6 +27,7 @@ var fhperc = flag.Int("ph", 50, "horizontal percentile")
 var fvperc = flag.Int("pv", 50, "vertical percentile")
 
 var fcif = flag.Bool("cif", true, "backtrack hpss mask by cif displacement")
+var ffat = flag.Bool("fat", false, "dilate vertical activations horizontally")
 
 var fwin = flag.String("w", `kaiser`, "use a `window`: hann, welch, vorbis, tri, kaiser")
 
@@ -91,7 +92,7 @@ func main() {
 	a := make([]float64, nbins)
 	b := make([]float64, nbins)
 	c := make([]float64, nbins)
-	// d := make([]float64, nbins)
+	d := make([]float64, nbins)
 
 	first := true
 	now := *fhrad
@@ -128,16 +129,23 @@ func main() {
 		if !preanalyze {
 			mono(mid, frames[now])
 
-			vert.Filtout(mid, a)
-			bank.Take(b)
-
-			for w := range nbins {
-				roto[now][w] = a[w] > b[w]
+			if *ffat {
+				smolbank.Insert(mid)
+				smolbank.Take(d)
+			} else {
+				copy(d, mid)
 			}
+			vert.Filtout(d, a)
+
+			bank.Take(b)
 			if *fvib != 0 {
 				smolv.Filtout(mid, c)
 			}
 			bank.Insert(c)
+
+			for w := range nbins {
+				roto[now][w] = a[w] > b[w]
+			}
 
 			if *fcif {
 				// Backpropagate the mask vertically by vertical bin shift (CIF).
@@ -202,6 +210,11 @@ func (b *horiz) Take(f []float64) {
 func (b *horiz) Filt(f []float64) {
 	b.Insert(f)
 	b.Take(f)
+}
+
+func (b *horiz) Filtout(in, out []float64) {
+	b.Insert(in)
+	b.Take(out)
 }
 
 type vert struct {
