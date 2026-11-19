@@ -84,28 +84,24 @@ func main() {
 
 	bank := newhoriz(nbins, *fhrad, float64(*fhperc)/100)
 	vert := newvert(*fvrad, float64(*fvperc)/100)
+	smolbank := newhoriz(nbins, *folap, 1)
+	smolv := newvert(*fvib, 1)
 
-	smolbank := make([]*mediator[float64, struct{}], nbins)
-	for i := range smolbank {
-		smolbank[i] = mediatorNew[float64, struct{}](*folap, *folap, 1)
-	}
-	magt := make([]float64, nbins)
-	magt1 := make([]float64, nbins)
-	magt2 := make([]float64, nbins)
+	mid := make([]float64, nbins)
+	a := make([]float64, nbins)
+	b := make([]float64, nbins)
+	c := make([]float64, nbins)
+	// d := make([]float64, nbins)
 
 	first := true
 	now := *fhrad
 
-	smolv := newvert(*fvib, 1)
-	vib := func(out []float64, in [][]complex128, ok bool) {
+	mono := func(out []float64, in [][]complex128) {
 		for w := range nbins {
 			out[w] = .0
 			for ch := range in {
 				out[w] += cmplx.Abs(in[ch][w])
 			}
-		}
-		if *fvib != 0 && ok {
-			smolv.Filt(out)
 		}
 	}
 
@@ -117,20 +113,32 @@ func main() {
 		// Accumulate lookahead.
 		if first {
 			for f := range frames[now:] {
-				vib(magt, frames[f], false)
-				bank.Insert(magt)
+				mono(mid, frames[f])
+				if *fvib != 0 {
+					smolv.Filt(mid)
+				}
+				bank.Insert(mid)
+			}
+			for f := range frames[*folap:] {
+				mono(mid, frames[f])
+				smolbank.Insert(mid)
 			}
 			first = false
 		}
 		if !preanalyze {
-			vib(magt1, frames[now], false)
-			vib(magt, frames[now], true)
-			vert.Filt(magt1)
-			bank.Take(magt2)
+			mono(mid, frames[now])
+
+			vert.Filtout(mid, a)
+			bank.Take(b)
+
 			for w := range nbins {
-				roto[now][w] = magt1[w] > magt2[w]
+				roto[now][w] = a[w] > b[w]
 			}
-			bank.Insert(magt)
+			if *fvib != 0 {
+				smolv.Filtout(mid, c)
+			}
+			bank.Insert(c)
+
 			if *fcif {
 				// Backpropagate the mask vertically by vertical bin shift (CIF).
 				clear(newroto)
@@ -211,6 +219,16 @@ func (b *vert) Filt(f []float64) {
 	}
 	for w := range f {
 		f[w], _ = b.a.Filt(f[w], struct{}{})
+	}
+}
+
+func (b *vert) Filtout(in, out []float64) {
+	b.a.Reset(b.a.N)
+	for w := b.a.N - 1; w >= 0; w-- { // Mirror the beginning
+		b.a.Insert(in[w], struct{}{})
+	}
+	for w := range in {
+		out[w], _ = b.a.Filt(in[w], struct{}{})
 	}
 }
 
