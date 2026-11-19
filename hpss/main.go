@@ -98,7 +98,6 @@ func main() {
 	c := make([]float64, nbins)
 	d := make([]float64, nbins)
 
-	first := true
 	now := max(*fhrad, *ffat)
 
 	mono := func(out []float64, in [][]complex128) {
@@ -115,25 +114,6 @@ func main() {
 	wins := [][]float64{win, window.Dx(win), window.T(win)}
 	common.StftHandle(gr, wavw, fft, wins, now, now, func(out [][]complex128, windowed [][][][]complex128, preanalyze bool) {
 		frames := windowed[0]
-
-		// Accumulate lookahead.
-		if first {
-			for f := range frames[now:] {
-				mono(mid, frames[f])
-				if *fvib != 0 {
-					smolv.Filt(mid)
-				}
-				bank.Insert(mid)
-			}
-			for f := range frames[now:] {
-				mono(mid, frames[f])
-				smolbank.Insert(mid)
-			}
-			first = false
-		}
-		if preanalyze {
-			return
-		}
 
 		if *ffat > 0 {
 			mono(mid, frames[now])
